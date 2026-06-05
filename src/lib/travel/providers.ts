@@ -48,7 +48,9 @@ export interface ItineraryGenerator {
 export class FallbackDestinationTrendProvider implements DestinationTrendProvider {
   async findDestinations(request: TripRequest): Promise<ProviderResult<DestinationOption>> {
     const normalized = request.destination?.trim().toLowerCase();
+    const excluded = new Set(request.excludedDestinationIds ?? []);
     const scored = destinations
+      .filter((destination) => !excluded.has(destination.id))
       .map((destination) => ({
         destination,
         score:
@@ -59,9 +61,10 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
       }))
       .sort((a, b) => b.score - a.score)
       .map((entry) => entry.destination);
-    const topDestination = scored[0];
+    const rankedDestinations = scored.length ? scored : destinations;
+    const topDestination = rankedDestinations[0];
     const matchedPreferred = Boolean(normalized && topDestination && destinationMatchesQuery(topDestination, normalized));
-    const data = request.preferredDestinationEnabled && normalized && !matchedPreferred ? [customDestination(request), ...scored] : scored;
+    const data = request.preferredDestinationEnabled && normalized && !matchedPreferred ? [customDestination(request), ...rankedDestinations] : rankedDestinations;
     const warnings = [
       ...(request.preferredDestinationEnabled && !normalized ? ["Destination preference was enabled but no destination was provided."] : []),
       ...(request.preferredDestinationEnabled && normalized && !matchedPreferred

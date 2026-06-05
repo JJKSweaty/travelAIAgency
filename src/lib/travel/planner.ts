@@ -87,6 +87,11 @@ export async function refineTrip(plan: TripPlan, intent: RefinementIntent): Prom
   if (intent === "food") nextRequest.interests = Array.from(new Set(["food", ...nextRequest.interests]));
   if (intent === "relaxed") nextRequest.travelStyle = "relaxed";
   if (intent === "adventure") nextRequest.interests = Array.from(new Set(["adventure", "nature", ...nextRequest.interests]));
+  if (intent === "next-destination") {
+    nextRequest.preferredDestinationEnabled = false;
+    nextRequest.destination = "";
+    nextRequest.excludedDestinationIds = Array.from(new Set([...(nextRequest.excludedDestinationIds ?? []), plan.destination.id]));
+  }
   if (intent === "replace-hotel") nextRequest.totalBudget = Math.round(nextRequest.totalBudget * 1.04);
 
   const refined = await planTrip(nextRequest);

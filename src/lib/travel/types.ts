@@ -23,6 +23,7 @@ export type TripRequest = {
   travelStyle: TravelStyle;
   interests: Interest[];
   transportPreference: TransportPreference;
+  excludedDestinationIds?: string[];
 };
 
 export type ProviderResult<T> = {
@@ -165,5 +166,6 @@ export type RefinementIntent =
   | "food"
   | "relaxed"
   | "adventure"
+  | "next-destination"
   | "replace-hotel"
   | "regenerate";

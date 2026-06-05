@@ -45,4 +45,12 @@ describe("planTrip", () => {
     expect(cheaper.request.totalBudget).toBeLessThan(plan.request.totalBudget);
     expect(cheaper.notes[0]).toContain("cheaper");
   });
+
+  it("moves to another destination with the same budget settings", async () => {
+    const plan = await planTrip({ ...request, preferredDestinationEnabled: false, destination: "" });
+    const next = await refineTrip(plan, "next-destination");
+    expect(next.destination.id).not.toBe(plan.destination.id);
+    expect(next.request.totalBudget).toBe(plan.request.totalBudget);
+    expect(next.request.excludedDestinationIds).toContain(plan.destination.id);
+  });
 });

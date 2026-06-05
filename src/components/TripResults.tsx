@@ -15,6 +15,7 @@ const refinements: { intent: RefinementIntent; label: string }[] = [
   { intent: "food", label: "Food-focused" },
   { intent: "relaxed", label: "More relaxed" },
   { intent: "adventure", label: "More adventure" },
+  { intent: "next-destination", label: "Try another destination" },
   { intent: "replace-hotel", label: "Replace hotel" },
   { intent: "regenerate", label: "Regenerate" }
 ];

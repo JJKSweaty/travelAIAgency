@@ -101,6 +101,7 @@ describe("TripResults", () => {
     expect(screen.getByText(/morning/i)).toBeInTheDocument();
     expect(screen.getByText(/afternoon/i)).toBeInTheDocument();
     expect(screen.getByText(/about \$25\/meal/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try another destination/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save trip/i })).toBeInTheDocument();
   });
 });

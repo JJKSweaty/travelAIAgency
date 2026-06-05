@@ -11,10 +11,11 @@ export const tripRequestSchema = z.object({
   travelers: z.coerce.number().int().min(1).max(12),
   travelStyle: z.enum(["relaxed", "balanced", "packed"]),
   interests: z.array(z.enum(["food", "nightlife", "nature", "museums", "beaches", "family", "luxury", "budget", "adventure"])).min(1),
-  transportPreference: z.enum(["rental-car", "public-transit", "flexible"])
+  transportPreference: z.enum(["rental-car", "public-transit", "flexible"]),
+  excludedDestinationIds: z.array(z.string()).optional()
 });
 
 export const refinementSchema = z.object({
   plan: z.any(),
-  intent: z.enum(["cheaper", "luxury", "food", "relaxed", "adventure", "replace-hotel", "regenerate"])
+  intent: z.enum(["cheaper", "luxury", "food", "relaxed", "adventure", "next-destination", "replace-hotel", "regenerate"])
 });
