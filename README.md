@@ -50,19 +50,23 @@ Optional location search settings:
 - `OPEN_METEO_API_KEY`, only needed for Open-Meteo commercial/customer API setups
 - `LOCATION_SEARCH_TIMEOUT_MS`, default `2500`
 
-Optional local AI itinerary enrichment uses Ollama when `OLLAMA_MODEL` is set:
+Optional AI itinerary enrichment uses OpenRouter when `OPENROUTER_API_KEY` is set:
 
-- `OLLAMA_MODEL`, for example `llama3.1`
-- `OLLAMA_BASE_URL`, default `http://localhost:11434`
-- `OLLAMA_TIMEOUT_MS`, default `8000`
-- `OLLAMA_TEMPERATURE`, default `0.85`
-- `OLLAMA_TOP_P`, default `0.9`
+- `OPENROUTER_API_KEY`, your OpenRouter API key
+- `OPENROUTER_MODEL`, default `nvidia/nemotron-3.5-content-safety:free`
+- `OPENROUTER_BASE_URL`, default `https://openrouter.ai/api/v1/chat/completions`
+- `OPENROUTER_TIMEOUT_MS`, default `12000`
+- `OPENROUTER_TEMPERATURE`, default `0.8`
+- `OPENROUTER_TOP_P`, default `0.9`
+- `OPENROUTER_MAX_TOKENS`, default `1100`
+- `OPENROUTER_HTTP_REFERER` (optional leaderboard attribution)
+- `OPENROUTER_X_TITLE` (optional leaderboard attribution)
 
-If Ollama is unavailable, invalid, or not configured, the deterministic fallback itinerary generator is used.
+If OpenRouter is unavailable, invalid, or not configured, the deterministic fallback itinerary generator is used.
 
 ## AI Usage
 
-AI is local-only through Ollama. When `OLLAMA_MODEL` is configured, the planner sends the selected destination, exact/flexible dates, trip settings, restaurants, and attractions to Ollama to draft the day-by-day itinerary JSON with more local color and variety. Budget allocation, destination ranking, provider links, and fallback estimates are deterministic TypeScript logic, not an AI API. No OpenAI or other hosted AI API is required.
+AI itinerary drafting runs through OpenRouter. When `OPENROUTER_API_KEY` is configured, the planner sends the selected destination, exact/flexible dates, trip settings, restaurants, and attractions to the configured OpenRouter model (default: `nvidia/nemotron-3.5-content-safety:free`) and expects strict JSON itinerary output. Budget allocation, destination ranking, provider links, and fallback estimates are deterministic TypeScript logic.
 
 ## Project Skill
 

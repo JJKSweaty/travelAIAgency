@@ -150,10 +150,39 @@ export type PriceComparison = {
 export type ItineraryDay = {
   day: number;
   title: string;
+  theme?: string;
   morning: string;
   afternoon: string;
   evening: string;
   estimatedCost: number;
+  additions?: ItineraryAddition[];
+};
+
+export type ItineraryAdditionCategory = "food" | "activity" | "shopping" | "show" | "relaxation" | "custom";
+
+export type TransitPlan = {
+  mode: "walk" | "public-transit" | "rideshare" | "drive";
+  durationMinutes: number;
+  summary: string;
+  from: string;
+  to: string;
+  mapLink: string;
+};
+
+export type ItineraryAddition = {
+  id: string;
+  title: string;
+  category: ItineraryAdditionCategory;
+  estimatedCost?: number;
+  note?: string;
+  transit?: TransitPlan;
+  addedAt: string;
+};
+
+export type TripStaySelection = {
+  type: "hotel" | "airbnb";
+  label: string;
+  location: string;
 };
 
 export type TripPlan = {
@@ -169,6 +198,7 @@ export type TripPlan = {
   restaurants: RestaurantOption[];
   attractions: AttractionOption[];
   itinerary: ItineraryDay[];
+  selectedStay?: TripStaySelection;
   providerSummary: {
     hotels: ProviderResult<HotelOption>["source"];
     priceComparison: ProviderResult<PriceComparison>["source"];

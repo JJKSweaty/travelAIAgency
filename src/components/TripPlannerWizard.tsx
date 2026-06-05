@@ -38,7 +38,7 @@ export function TripPlannerWizard() {
   const [request, setRequest] = useState<TripRequest>(initialRequest);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [aiHealth, setAiHealth] = useState<{ status: "checking" | "ollama-ready" | "fallback"; model: string | null }>({
+  const [aiHealth, setAiHealth] = useState<{ status: "checking" | "openrouter-ready" | "fallback"; model: string | null }>({
     status: "checking",
     model: null
   });
@@ -60,7 +60,7 @@ export function TripPlannerWizard() {
         const payload = (await response.json()) as {
           configuredProviders?: { ai?: string; aiModel?: string | null };
         };
-        const status = payload.configuredProviders?.ai === "ollama-ready" ? "ollama-ready" : "fallback";
+        const status = payload.configuredProviders?.ai === "openrouter-ready" ? "openrouter-ready" : "fallback";
         setAiHealth({ status, model: payload.configuredProviders?.aiModel ?? null });
       } catch {
         setAiHealth({ status: "fallback", model: null });
@@ -296,12 +296,12 @@ export function TripPlannerWizard() {
             <div className="h-3 rounded-full bg-coral" style={{ width: `${Math.min(100, Math.max(18, perPersonDay / 3))}%` }} />
           </div>
           <p className="mt-4 text-sm font-medium">{budgetTone} starting point</p>
-          <p className="mt-4 text-sm font-semibold text-ink">Ollama status</p>
+          <p className="mt-4 text-sm font-semibold text-ink">AI status</p>
           <p className="mt-1 text-sm text-ink/60">
             {aiHealth.status === "checking"
-              ? "Checking local model..."
-              : aiHealth.status === "ollama-ready"
-                ? `Using Ollama${aiHealth.model ? ` (${aiHealth.model})` : ""}`
+              ? "Checking OpenRouter configuration..."
+              : aiHealth.status === "openrouter-ready"
+                ? `Using OpenRouter${aiHealth.model ? ` (${aiHealth.model})` : ""}`
                 : "Using fallback itinerary generator"}
           </p>
         </div>

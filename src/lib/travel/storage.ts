@@ -21,6 +21,19 @@ export function saveTrip(plan: TripPlan) {
   window.localStorage.setItem(savedTripsKey, JSON.stringify(next));
 }
 
+export function isTripSaved(id: string): boolean {
+  if (typeof window === "undefined") return false;
+  return readSavedTrips().some((trip) => trip.id === id);
+}
+
+export function updateSavedTrip(plan: TripPlan) {
+  if (typeof window === "undefined") return;
+  const existing = readSavedTrips();
+  if (!existing.some((trip) => trip.id === plan.id)) return;
+  const next = existing.map((trip) => (trip.id === plan.id ? plan : trip));
+  window.localStorage.setItem(savedTripsKey, JSON.stringify(next));
+}
+
 export function readSavedTrips(): TripPlan[] {
   if (typeof window === "undefined") return [];
   const raw = window.localStorage.getItem(savedTripsKey);

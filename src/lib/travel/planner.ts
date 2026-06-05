@@ -1,5 +1,5 @@
 import { allocateBudget } from "./budget";
-import { isOllamaConfigured, OllamaItineraryGenerator } from "./ai";
+import { isOpenRouterConfigured, OpenRouterItineraryGenerator } from "./ai";
 import {
   type AttractionProvider,
   type CarSearchProvider,
@@ -21,7 +21,7 @@ const carProvider: CarSearchProvider = new FallbackCarSearchProvider();
 const restaurantProvider: RestaurantProvider = new FallbackRestaurantProvider();
 const attractionProvider: AttractionProvider = new FallbackAttractionProvider();
 const travelPriceProvider: TravelPriceProvider = new FallbackTravelPriceProvider();
-const itineraryGenerator = new OllamaItineraryGenerator();
+const itineraryGenerator = new OpenRouterItineraryGenerator();
 
 export async function planTrip(request: TripRequest): Promise<TripPlan> {
   const destinations = await destinationProvider.findDestinations(request);
@@ -44,6 +44,17 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
   const sortedHotels = hotels.data.sort((a, b) => a.nightlyPrice - b.nightlyPrice);
   const availableHotels = sortedHotels.filter((hotel) => !(request.excludedHotelIds ?? []).includes(hotel.id));
   const recommendedHotels = availableHotels.length ? availableHotels : sortedHotels;
+  const selectedStay = recommendedHotels[0]
+    ? {
+        type: "hotel" as const,
+        label: recommendedHotels[0].name,
+        location: recommendedHotels[0].location
+      }
+    : {
+        type: "airbnb" as const,
+        label: "Airbnb / private stay",
+        location: `${destination.name} center`
+      };
 
   return {
     id: crypto.randomUUID(),
@@ -58,6 +69,7 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
     restaurants: restaurants.data,
     attractions: attractions.data,
     itinerary: itinerary.data,
+    selectedStay,
     providerSummary: {
       hotels: hotels.source,
       priceComparison: priceComparison.source,
@@ -124,8 +136,8 @@ export function providerHealth() {
       cars: process.env.CARS_API_KEY ? "live-ready" : "fallback",
       restaurants: process.env.RESTAURANTS_API_KEY ? "live-ready" : "fallback",
       attractions: process.env.ATTRACTIONS_API_KEY ? "live-ready" : "fallback",
-      ai: isOllamaConfigured() ? "ollama-ready" : "fallback",
-      aiModel: process.env.OLLAMA_MODEL ?? null
+      ai: isOpenRouterConfigured() ? "openrouter-ready" : "fallback",
+      aiModel: process.env.OPENROUTER_MODEL ?? "nvidia/nemotron-3.5-content-safety:free"
     },
     fallbackAvailable: true
   };

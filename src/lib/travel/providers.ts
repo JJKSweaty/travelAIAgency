@@ -185,23 +185,70 @@ export class FallbackItineraryGenerator implements ItineraryGenerator {
     attractions: AttractionOption[];
   }): Promise<ProviderResult<ItineraryDay>> {
     const variantOffset = Math.max(0, request.itineraryVariant ?? 0);
+    const budget = allocateBudget(request, destination);
+    const dailyCosts = buildDailyCosts(request, budget.food + budget.activities + Math.round(budget.transport * 0.55));
+    const themes = buildThemes(destination.name, request.interests);
     const days = Array.from({ length: request.tripLengthDays }, (_, index) => {
       const attraction = attractions[(index + variantOffset) % Math.max(attractions.length, 1)];
       const restaurant = restaurants[(index + variantOffset) % Math.max(restaurants.length, 1)];
+      const nextAttraction = attractions[(index + variantOffset + 1) % Math.max(attractions.length, 1)];
       const active = request.travelStyle === "packed";
       const relaxed = request.travelStyle === "relaxed";
+      const theme = themes[(index + variantOffset) % themes.length];
+      const neighborhood = restaurant?.neighborhood ?? "the central district";
+      const firstDay = index === 0;
       return {
         day: index + 1,
-        title: index === 0 ? `Arrival and ${destination.name} orientation` : `${interestLabel(attraction?.category)} day`,
-        morning: index === 0 ? `Arrive from ${request.origin} and check into a central stay.` : relaxed ? `Slow breakfast near ${restaurant?.neighborhood ?? "the center"} and a neighborhood walk.` : `Start early with ${attraction?.name ?? "a local highlight"}.`,
-        afternoon: active ? `Add a second stop around ${destination.name} before a short recharge.` : `Spend focused time at ${attraction?.name ?? "a signature attraction"}.`,
-        evening: `Dinner at ${restaurant?.name ?? "a local favorite"} with room in the budget for a flexible night plan.`,
-        estimatedCost: Math.round(destination.averageDailyFood * request.travelers + destination.averageDailyActivities * (active ? 1.25 : relaxed ? 0.75 : 1))
+        title: firstDay ? `Arrival in ${destination.name} and neighborhood reset` : `${destination.name}: ${theme}`,
+        theme,
+        morning: firstDay
+          ? `Arrive from ${request.origin}, settle into your stay, and do an easy coffee walk around ${neighborhood}.`
+          : relaxed
+            ? `Slow morning around ${neighborhood} with a local breakfast stop, then ${attraction?.name ?? "a nearby highlight"}.`
+            : `Start with ${attraction?.name ?? "a local highlight"} before crowds build.` ,
+        afternoon: active
+          ? `Pair ${attraction?.name ?? "the main stop"} with ${nextAttraction?.name ?? "a nearby second stop"} and a short recovery break.`
+          : `Anchor the afternoon around ${attraction?.name ?? "one signature stop"}, then move through nearby streets.` ,
+        evening: `Dinner at ${restaurant?.name ?? "a local favorite"} in ${neighborhood}, followed by a low-pressure evening option that matches your pace.`,
+        estimatedCost: dailyCosts[index]
       };
     });
 
     return { data: days, source: "fallback", providerName: "Deterministic itinerary synthesizer", confidence: 0.68 };
   }
+}
+
+function buildThemes(destinationName: string, interests: Interest[]): string[] {
+  const byInterest: Record<Interest, string[]> = {
+    food: ["market crawl and tastings", "cafe and neighborhood bites", "chef-counter dinner route"],
+    nightlife: ["late bars and live sets", "sunset rooftops and cocktails", "music venues and night lanes"],
+    nature: ["parks, viewpoints, and green loops", "waterfront walk and scenic breaks", "urban nature reset"],
+    museums: ["history and design circuit", "art and architecture trail", "culture and old-quarter walk"],
+    beaches: ["coastline swim and boardwalk", "beach clubs and sunset shore", "morning surf, evening promenade"],
+    family: ["kid-friendly discovery route", "easy landmarks and open spaces", "hands-on family activity run"],
+    luxury: ["signature dining and spa time", "boutique shopping and lounge night", "premium rooftop and tasting menu"],
+    budget: ["value eats and free highlights", "low-cost neighborhood gems", "public spaces and market finds"],
+    adventure: ["active trail and local challenge", "outdoor adrenaline window", "high-energy movement day"]
+  };
+
+  const selected = interests.length ? interests : ["food", "nature"];
+  const merged = selected.flatMap((interest) => byInterest[interest]);
+  const base = [`${destinationName.toLowerCase()} old-town rhythm`, `${destinationName.toLowerCase()} local neighborhoods`];
+  return [...merged, ...base].filter(Boolean);
+}
+
+function buildDailyCosts(request: TripRequest, spendTarget: number): number[] {
+  const count = Math.max(1, request.tripLengthDays);
+  const profiles = {
+    relaxed: [0.82, 0.94, 1.06, 0.9, 1.12, 0.88, 1.04],
+    balanced: [0.9, 1.08, 0.98, 1.12, 0.95, 1.2, 1.02],
+    packed: [1.0, 1.16, 1.08, 1.24, 0.96, 1.28, 1.1]
+  } as const;
+  const profile = profiles[request.travelStyle];
+  const weights = Array.from({ length: count }, (_, index) => profile[index % profile.length]);
+  const totalWeight = weights.reduce((sum, value) => sum + value, 0);
+
+  return weights.map((weight) => Math.max(35, Math.round((spendTarget * weight) / Math.max(totalWeight, 1))));
 }
 
 function budgetCostTarget(totalBudget: number, days: number, travelers: number): DestinationOption["costLevel"] {
@@ -259,7 +306,3 @@ function customDestination(request: TripRequest): DestinationOption {
   };
 }
 
-function interestLabel(interest?: Interest): string {
-  if (!interest) return "Discovery";
-  return interest.charAt(0).toUpperCase() + interest.slice(1);
-}

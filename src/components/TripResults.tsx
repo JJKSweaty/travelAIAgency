@@ -3,11 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bookmark, Calendar, Car, ChefHat, Coffee, ExternalLink, Hotel, MapPinned, Moon, RefreshCcw, Sparkles, Star, Sun, Ticket } from "lucide-react";
+import { ArrowLeft, Bookmark, Calendar, Car, ChefHat, Coffee, ExternalLink, Hotel, MapPinned, Moon, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
 import { BudgetMeter } from "@/components/BudgetMeter";
 import { PriceComparisonChart } from "@/components/PriceComparisonChart";
-import { readCurrentTrip, saveTrip, writeCurrentTrip } from "@/lib/travel/storage";
-import type { RefinementIntent, TripPlan } from "@/lib/travel/types";
+import { isTripSaved, readCurrentTrip, saveTrip, updateSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
+import { buildTransitPlan } from "@/lib/travel/transit";
+import type { ItineraryAddition, ItineraryAdditionCategory, RefinementIntent, TripPlan, TripStaySelection } from "@/lib/travel/types";
 
 const refinements: { intent: RefinementIntent; label: string }[] = [
   { intent: "cheaper", label: "Cheaper" },
@@ -26,11 +27,30 @@ export function TripResults() {
   const [isRefining, setIsRefining] = useState<RefinementIntent | null>(null);
   const [refineError, setRefineError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [drafts, setDrafts] = useState<Record<number, { title: string; category: ItineraryAdditionCategory; estimatedCost: string }>>({});
 
   useEffect(() => {
-    const task = window.setTimeout(() => setPlan(readCurrentTrip()), 0);
+    const task = window.setTimeout(() => {
+      const current = readCurrentTrip();
+      if (!current) return;
+      const selectedStay = current.selectedStay ?? hotelToStay(current);
+      const normalized = {
+        ...current,
+        itinerary: current.itinerary.map((day) => ({ ...day, additions: day.additions ?? [] })),
+        selectedStay
+      };
+      setPlan(normalized);
+      writeCurrentTrip(normalized);
+      setSaved(isTripSaved(normalized.id));
+    }, 0);
     return () => window.clearTimeout(task);
   }, []);
+
+  function persist(next: TripPlan) {
+    setPlan(next);
+    writeCurrentTrip(next);
+    if (saved) updateSavedTrip(next);
+  }
 
   async function refine(intent: RefinementIntent) {
     if (!plan) return;
@@ -44,8 +64,7 @@ export function TripResults() {
       });
       if (!response.ok) throw new Error("Could not refine this trip.");
       const next = (await response.json()) as TripPlan;
-      writeCurrentTrip(next);
-      setPlan(next);
+      persist({ ...next, selectedStay: next.selectedStay ?? hotelToStay(next), itinerary: next.itinerary.map((day) => ({ ...day, additions: day.additions ?? [] })) });
       setSaved(false);
     } catch (err) {
       setRefineError(err instanceof Error ? err.message : "Could not refine this trip.");
@@ -66,6 +85,42 @@ export function TripResults() {
     );
   }
 
+  function setSelectedStay(stay: TripStaySelection) {
+    if (!plan) return;
+    persist({ ...plan, selectedStay: stay });
+  }
+
+  function updateDraft(day: number, patch: Partial<{ title: string; category: ItineraryAdditionCategory; estimatedCost: string }>) {
+    setDrafts((current) => {
+      const base = current[day] ?? { title: "", category: "activity", estimatedCost: "" };
+      return { ...current, [day]: { ...base, ...patch } };
+    });
+  }
+
+  function addDayItem(day: number) {
+    if (!plan) return;
+    const draft = drafts[day] ?? { title: "", category: "activity", estimatedCost: "" };
+    const title = draft.title.trim();
+    if (!title) return;
+
+    const addition: ItineraryAddition = {
+      id: crypto.randomUUID(),
+      title,
+      category: draft.category,
+      estimatedCost: draft.estimatedCost ? Math.max(0, Number(draft.estimatedCost)) : undefined,
+      transit: buildTransitPlan({ fromStay: plan.selectedStay, toPlace: title, transportPreference: plan.request.transportPreference }),
+      addedAt: new Date().toISOString()
+    };
+
+    const next: TripPlan = {
+      ...plan,
+      itinerary: plan.itinerary.map((item) => (item.day === day ? { ...item, additions: [...(item.additions ?? []), addition] } : item))
+    };
+
+    persist(next);
+    setDrafts((current) => ({ ...current, [day]: { title: "", category: draft.category, estimatedCost: "" } }));
+  }
+
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -77,6 +132,7 @@ export function TripResults() {
           className="flex items-center gap-2 rounded-lg bg-reef px-4 py-2 text-sm font-semibold text-white"
           onClick={() => {
             saveTrip(plan);
+            writeCurrentTrip(plan);
             setSaved(true);
           }}
         >
@@ -122,19 +178,123 @@ export function TripResults() {
 
           <Panel title="Itinerary" icon={<Calendar size={18} />}>
             <div className="grid gap-4">
+              <div className="rounded-lg border border-ink/10 bg-white/76 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-reef">Stay base for transit planning</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-[220px_1fr]">
+                  <select
+                    className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm"
+                    value={plan.selectedStay?.type === "airbnb" ? "airbnb" : plan.selectedStay?.label ?? ""}
+                    onChange={(event) => {
+                      if (event.target.value === "airbnb") {
+                        setSelectedStay({ type: "airbnb", label: "Airbnb / private stay", location: plan.selectedStay?.location ?? "" });
+                        return;
+                      }
+                      const selectedHotel = plan.hotels.find((hotel) => hotel.name === event.target.value);
+                      if (!selectedHotel) return;
+                      setSelectedStay({ type: "hotel", label: selectedHotel.name, location: selectedHotel.location });
+                    }}
+                  >
+                    {plan.hotels.map((hotel) => (
+                      <option key={hotel.id} value={hotel.name}>
+                        {hotel.name} ({hotel.location})
+                      </option>
+                    ))}
+                    <option value="airbnb">Airbnb / private stay</option>
+                  </select>
+                  {plan.selectedStay?.type === "airbnb" ? (
+                    <input
+                      className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm"
+                      placeholder="Enter Airbnb area or address"
+                      value={plan.selectedStay.location}
+                      onChange={(event) =>
+                        setSelectedStay({
+                          type: "airbnb",
+                          label: plan.selectedStay?.label ?? "Airbnb / private stay",
+                          location: event.target.value
+                        })
+                      }
+                    />
+                  ) : (
+                    <div className="rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink/68">Using {plan.selectedStay?.label ?? "your selected hotel"} as route origin</div>
+                  )}
+                </div>
+              </div>
+
               {plan.itinerary.map((day) => (
                 <div key={day.day} className="grid gap-4 rounded-lg border border-ink/10 bg-white/76 p-4 sm:grid-cols-[94px_1fr]">
                   <div className="sm:border-r sm:border-ink/10 sm:pr-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-reef">Day {day.day}</p>
-                    <p className="mt-2 text-lg font-semibold">${day.estimatedCost}</p>
+                    <p className="mt-2 text-lg font-semibold">${day.estimatedCost + (day.additions ?? []).reduce((sum, item) => sum + (item.estimatedCost ?? 0), 0)}</p>
                     <p className="text-xs text-ink/52">estimated day spend</p>
                   </div>
                   <div>
                     <h3 className="font-semibold">{day.title}</h3>
+                    {day.theme ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.1em] text-ink/48">{day.theme}</p> : null}
                     <div className="mt-3 grid gap-2">
                       <ItinerarySegment icon={<Coffee size={15} />} label="Morning" text={day.morning} />
                       <ItinerarySegment icon={<Sun size={15} />} label="Afternoon" text={day.afternoon} />
                       <ItinerarySegment icon={<Moon size={15} />} label="Evening" text={day.evening} />
+                    </div>
+
+                    <div className="mt-3 rounded-lg border border-ink/10 bg-white p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-reef">Add to day {day.day}</p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_130px_120px_96px]">
+                        <input
+                          className="rounded-lg border border-ink/10 px-3 py-2 text-sm"
+                          placeholder="Add place, activity, or food stop"
+                          value={drafts[day.day]?.title ?? ""}
+                          onChange={(event) => updateDraft(day.day, { title: event.target.value })}
+                        />
+                        <select
+                          className="rounded-lg border border-ink/10 px-3 py-2 text-sm"
+                          value={drafts[day.day]?.category ?? "activity"}
+                          onChange={(event) => updateDraft(day.day, { category: event.target.value as ItineraryAdditionCategory })}
+                        >
+                          <option value="food">Food</option>
+                          <option value="activity">Activity</option>
+                          <option value="show">Show</option>
+                          <option value="shopping">Shopping</option>
+                          <option value="relaxation">Relaxation</option>
+                          <option value="custom">Custom</option>
+                        </select>
+                        <input
+                          className="rounded-lg border border-ink/10 px-3 py-2 text-sm"
+                          placeholder="Cost ($)"
+                          type="number"
+                          min={0}
+                          value={drafts[day.day]?.estimatedCost ?? ""}
+                          onChange={(event) => updateDraft(day.day, { estimatedCost: event.target.value })}
+                        />
+                        <button className="inline-flex items-center justify-center gap-1 rounded-lg bg-reef px-3 py-2 text-sm font-semibold text-white" onClick={() => addDayItem(day.day)}>
+                          <Plus size={14} aria-hidden />
+                          Add
+                        </button>
+                      </div>
+
+                      {(day.additions ?? []).length > 0 ? (
+                        <div className="mt-3 grid gap-2">
+                          {(day.additions ?? []).map((item) => (
+                            <div key={item.id} className="rounded-lg bg-ink/5 px-3 py-3 text-sm">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-semibold">{item.title}</span>
+                                <span className="rounded bg-coral/10 px-2 py-0.5 text-xs font-medium capitalize text-coral">{item.category}</span>
+                                {item.estimatedCost ? <span className="text-xs text-ink/58">about ${item.estimatedCost}</span> : null}
+                              </div>
+                              {item.transit ? (
+                                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-ink/62">
+                                  <span className="inline-flex items-center gap-1">
+                                    <Route size={13} aria-hidden />
+                                    {item.transit.summary}
+                                  </span>
+                                  <a className="font-medium text-reef hover:underline" href={item.transit.mapLink} target="_blank" rel="noreferrer">
+                                    Open route
+                                  </a>
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -214,6 +374,22 @@ export function TripResults() {
       </section>
     </main>
   );
+}
+
+function hotelToStay(plan: TripPlan): TripStaySelection {
+  const top = plan.hotels[0];
+  if (!top) {
+    return {
+      type: "airbnb",
+      label: "Airbnb / private stay",
+      location: "City center"
+    };
+  }
+  return {
+    type: "hotel",
+    label: top.name,
+    location: top.location
+  };
 }
 
 function ItinerarySegment({ icon, label, text }: { icon: React.ReactNode; label: string; text: string }) {
