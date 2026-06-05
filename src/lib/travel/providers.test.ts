@@ -32,7 +32,12 @@ describe("destination providers", () => {
 
   it("returns a custom suggestion when no curated destination matches", () => {
     const suggestions = suggestDestinations("Atlantis");
-    expect(suggestions[0]).toMatchObject({ name: "Atlantis", country: "Custom destination" });
+    expect(suggestions[0]).toMatchObject({ name: "Atlantis", country: "Global destination" });
+  });
+
+  it("parses a custom destination country from free text", () => {
+    const suggestions = suggestDestinations("Nairobi, Kenya");
+    expect(suggestions[0]).toMatchObject({ name: "Nairobi", country: "Kenya" });
   });
 
   it("keeps exact preferred destinations ahead of trending results", async () => {
@@ -45,6 +50,6 @@ describe("destination providers", () => {
     const provider = new FallbackDestinationTrendProvider();
     const result = await provider.findDestinations({ ...request, destination: "Atlantis" });
     expect(result.data[0].name).toBe("Atlantis");
-    expect(result.warnings?.[0]).toContain("not in the curated index");
+    expect(result.warnings?.[0]).toContain("custom global destination");
   });
 });

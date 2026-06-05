@@ -11,26 +11,28 @@ describe("TripPlannerWizard", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({
-          destinations: [
-            {
-              id: "lisbon",
-              name: "Lisbon",
-              country: "Portugal",
-              summary: "Food and neighborhoods.",
-              imageUrl: "https://example.com",
-              costLevel: 2,
-              trendingScore: 94,
-              bestFor: ["food", "budget"],
-              averageNightlyHotel: 140,
-              averageDailyFood: 50,
-              averageDailyActivities: 40,
-              bookingLink: "https://example.com"
-            }
-          ]
-        })
+      vi.fn(async (input) => {
+        const url = String(input);
+        const isOrigin = url.includes("mode=origin");
+        return {
+          ok: true,
+          json: async () => ({
+            locations: [
+              isOrigin
+                ? { id: "geocoding-toronto", name: "Toronto", country: "Canada", label: "Toronto, Canada", source: "geocoding", detail: "Ontario, Canada" }
+                : {
+                    id: "curated-lisbon",
+                    name: "Lisbon",
+                    country: "Portugal",
+                    label: "Lisbon, Portugal",
+                    source: "curated",
+                    detail: "Curated travel seed",
+                    costLevel: 2,
+                    bestFor: ["food", "budget"]
+                  }
+            ]
+          })
+        };
       })
     );
   });
@@ -60,6 +62,15 @@ describe("TripPlannerWizard", () => {
     await user.click(screen.getByRole("button", { name: /destination mode/i }));
     await user.type(screen.getByRole("combobox", { name: /preferred destination/i }), "lis");
     await user.click(await screen.findByRole("option", { name: /lisbon/i }));
-    expect(screen.getByRole("combobox", { name: /preferred destination/i })).toHaveValue("Lisbon");
+    expect(screen.getByRole("combobox", { name: /preferred destination/i })).toHaveValue("Lisbon, Portugal");
+  });
+
+  it("shows origin autocomplete suggestions and applies a selected origin", async () => {
+    const user = userEvent.setup();
+    render(<TripPlannerWizard />);
+    await user.clear(screen.getByRole("combobox", { name: /origin/i }));
+    await user.type(screen.getByRole("combobox", { name: /origin/i }), "tor");
+    await user.click(await screen.findByRole("option", { name: /toronto/i }));
+    expect(screen.getByRole("combobox", { name: /origin/i })).toHaveValue("Toronto, Canada");
   });
 });

@@ -1,5 +1,6 @@
 export type TravelStyle = "relaxed" | "balanced" | "packed";
 export type TransportPreference = "rental-car" | "public-transit" | "flexible";
+export type LocationSuggestionMode = "origin" | "destination";
 export type Interest =
   | "food"
   | "nightlife"
@@ -32,6 +33,20 @@ export type ProviderResult<T> = {
   providerName: string;
   confidence: number;
   warnings?: string[];
+};
+
+export type LocationOption = {
+  id: string;
+  name: string;
+  country: string;
+  label: string;
+  source: "geocoding" | "curated" | "custom";
+  detail?: string;
+  latitude?: number;
+  longitude?: number;
+  population?: number;
+  costLevel?: DestinationOption["costLevel"];
+  bestFor?: Interest[];
 };
 
 export type BudgetBreakdown = {

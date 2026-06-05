@@ -1,4 +1,5 @@
 import { attractionsFor, carsFor, destinations, flightQuotesFor, hotelMarketQuotesFor, hotelsFor, restaurantsFor } from "./fallback-data";
+import { locationSlug, parseLocationLabel } from "./locations";
 import type {
   AttractionOption,
   CarOption,
@@ -68,14 +69,14 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
     const warnings = [
       ...(request.preferredDestinationEnabled && !normalized ? ["Destination preference was enabled but no destination was provided."] : []),
       ...(request.preferredDestinationEnabled && normalized && !matchedPreferred
-        ? [`"${request.destination}" is not in the curated index yet, so generic fallback estimates were used for that destination.`]
+        ? [`"${request.destination}" is being planned as a custom global destination with generic fallback estimates. Verify local prices and availability before booking.`]
         : [])
     ];
 
     return {
       data,
       source: "fallback",
-      providerName: "Curated destination trend index",
+      providerName: "Global destination planner with curated trend seeds",
       confidence: 0.72,
       warnings: warnings.length ? warnings : undefined
     };
@@ -208,13 +209,14 @@ function destinationMatchesQuery(destination: DestinationOption, normalized: str
 }
 
 function customDestination(request: TripRequest): DestinationOption {
-  const name = titleCase(request.destination?.trim() || "Custom destination");
+  const parsed = parseLocationLabel(request.destination?.trim() || "Custom destination");
+  const name = parsed.name;
   const costLevel = budgetCostTarget(request.totalBudget, request.tripLengthDays, request.travelers);
   return {
-    id: `custom-${slugify(name)}`,
+    id: `custom-${locationSlug(parsed.label)}`,
     name,
-    country: "Custom destination",
-    summary: "A user-entered destination planned with generic fallback estimates. Open linked sources to verify local prices and availability.",
+    country: parsed.country ?? "Global destination",
+    summary: "A user-entered global destination planned with generic fallback estimates. Open linked sources to verify local prices and availability.",
     imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
     costLevel,
     trendingScore: 70,
@@ -222,20 +224,8 @@ function customDestination(request: TripRequest): DestinationOption {
     averageNightlyHotel: costLevel >= 5 ? 285 : costLevel === 4 ? 220 : costLevel === 3 ? 155 : 105,
     averageDailyFood: costLevel >= 5 ? 98 : costLevel === 4 ? 82 : costLevel === 3 ? 58 : 38,
     averageDailyActivities: costLevel >= 5 ? 86 : costLevel === 4 ? 68 : costLevel === 3 ? 46 : 32,
-    bookingLink: `https://www.google.com/travel/explore?q=${encodeURIComponent(name)}`
+    bookingLink: `https://www.google.com/travel/explore?q=${encodeURIComponent(parsed.label)}`
   };
-}
-
-function titleCase(value: string) {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function slugify(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "destination";
 }
 
 function interestLabel(interest?: Interest): string {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Sparkles, Users } from "lucide-react";
 import { writeCurrentTrip } from "@/lib/travel/storage";
-import type { DestinationOption, Interest, TransportPreference, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
+import type { Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
 
 const interestOptions: { id: Interest; label: string }[] = [
   { id: "food", label: "Food" },
@@ -37,35 +37,16 @@ export function TripPlannerWizard() {
   const [request, setRequest] = useState<TripRequest>(initialRequest);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [destinationSuggestions, setDestinationSuggestions] = useState<DestinationOption[]>([]);
+  const [originSuggestions, setOriginSuggestions] = useState<LocationOption[]>([]);
+  const [destinationSuggestions, setDestinationSuggestions] = useState<LocationOption[]>([]);
+  const [showOriginSuggestions, setShowOriginSuggestions] = useState(false);
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
 
   const perPersonDay = useMemo(() => Math.round(request.totalBudget / Math.max(1, request.travelers * request.tripLengthDays)), [request]);
   const budgetTone = perPersonDay < 90 ? "Tight" : perPersonDay < 180 ? "Workable" : "Comfortable";
 
-  useEffect(() => {
-    if (!request.preferredDestinationEnabled) return;
-
-    const controller = new AbortController();
-    const task = window.setTimeout(async () => {
-      try {
-        const response = await fetch(`/api/destination-suggestions?q=${encodeURIComponent(request.destination ?? "")}`, {
-          signal: controller.signal
-        });
-        if (!response.ok) return;
-        const payload = (await response.json()) as { destinations?: DestinationOption[] };
-        setDestinationSuggestions(payload.destinations ?? []);
-      } catch (err) {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        setDestinationSuggestions([]);
-      }
-    }, 120);
-
-    return () => {
-      controller.abort();
-      window.clearTimeout(task);
-    };
-  }, [request.destination, request.preferredDestinationEnabled]);
+  useLocationSuggestions(request.origin, true, "origin", setOriginSuggestions);
+  useLocationSuggestions(request.destination ?? "", request.preferredDestinationEnabled, "destination", setDestinationSuggestions);
 
   function toggleInterest(interest: Interest) {
     setRequest((current) => {
@@ -121,7 +102,32 @@ export function TripPlannerWizard() {
         <div className="grid gap-6 p-5 sm:p-8">
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Origin" icon={<Plane size={17} />}>
-              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.origin} onChange={(event) => setRequest({ ...request, origin: event.target.value })} />
+              <div className="relative">
+                <input
+                  className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
+                  value={request.origin}
+                  role="combobox"
+                  aria-expanded={showOriginSuggestions}
+                  aria-controls="origin-suggestions"
+                  aria-autocomplete="list"
+                  onFocus={() => setShowOriginSuggestions(true)}
+                  onBlur={() => window.setTimeout(() => setShowOriginSuggestions(false), 120)}
+                  onChange={(event) => {
+                    setRequest({ ...request, origin: event.target.value });
+                    setShowOriginSuggestions(true);
+                  }}
+                />
+                <LocationSuggestionList
+                  id="origin-suggestions"
+                  visible={showOriginSuggestions}
+                  locations={originSuggestions}
+                  selectedValue={request.origin}
+                  onSelect={(location) => {
+                    setRequest({ ...request, origin: location.label });
+                    setShowOriginSuggestions(false);
+                  }}
+                />
+              </div>
             </Field>
             <Field label="Destination mode" icon={<MapPin size={17} />}>
               <button
@@ -143,7 +149,7 @@ export function TripPlannerWizard() {
               <div className="relative">
                 <input
                   className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
-                  placeholder="Lisbon, Kyoto, Mexico City..."
+                  placeholder="Lisbon, Nairobi, Sapporo..."
                   value={request.destination}
                   role="combobox"
                   aria-expanded={showDestinationSuggestions}
@@ -156,37 +162,16 @@ export function TripPlannerWizard() {
                     setShowDestinationSuggestions(true);
                   }}
                 />
-                {showDestinationSuggestions && destinationSuggestions.length ? (
-                  <div id="destination-suggestions" role="listbox" className="absolute z-20 mt-2 max-h-80 w-full overflow-auto rounded-lg border border-ink/10 bg-white p-2 shadow-soft">
-                    {destinationSuggestions.map((destination) => (
-                      <button
-                        key={destination.id}
-                        type="button"
-                        role="option"
-                        aria-selected={request.destination === destination.name}
-                        className="focus-ring grid w-full gap-2 rounded-lg px-3 py-3 text-left transition hover:bg-reef/10"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                          setRequest({ ...request, destination: destination.name });
-                          setShowDestinationSuggestions(false);
-                        }}
-                      >
-                        <span className="flex items-center justify-between gap-3">
-                          <span className="font-semibold">{destination.name}</span>
-                          <span className="text-xs font-medium text-ink/52">{destination.country}</span>
-                        </span>
-                        <span className="flex flex-wrap items-center gap-2 text-xs text-ink/58">
-                          <span className="rounded bg-ink/6 px-2 py-1">Cost {destination.costLevel}/5</span>
-                          {destination.bestFor.slice(0, 3).map((interest) => (
-                            <span key={interest} className="rounded bg-coral/10 px-2 py-1 text-coral">
-                              {interest}
-                            </span>
-                          ))}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
+                <LocationSuggestionList
+                  id="destination-suggestions"
+                  visible={showDestinationSuggestions}
+                  locations={destinationSuggestions}
+                  selectedValue={request.destination ?? ""}
+                  onSelect={(location) => {
+                    setRequest({ ...request, destination: location.label });
+                    setShowDestinationSuggestions(false);
+                  }}
+                />
               </div>
             </Field>
           ) : null}
@@ -270,6 +255,86 @@ export function TripPlannerWizard() {
         </div>
       </aside>
     </section>
+  );
+}
+
+function useLocationSuggestions(
+  query: string,
+  enabled: boolean,
+  mode: LocationSuggestionMode,
+  setSuggestions: (locations: LocationOption[]) => void
+) {
+  useEffect(() => {
+    if (!enabled) {
+      setSuggestions([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const task = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/location-suggestions?q=${encodeURIComponent(query)}&mode=${mode}`, {
+          signal: controller.signal
+        });
+        if (!response.ok) return;
+        const payload = (await response.json()) as { locations?: LocationOption[] };
+        setSuggestions(payload.locations ?? []);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setSuggestions([]);
+      }
+    }, 140);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(task);
+    };
+  }, [enabled, mode, query, setSuggestions]);
+}
+
+function LocationSuggestionList({
+  id,
+  visible,
+  locations,
+  selectedValue,
+  onSelect
+}: {
+  id: string;
+  visible: boolean;
+  locations: LocationOption[];
+  selectedValue: string;
+  onSelect: (location: LocationOption) => void;
+}) {
+  if (!visible || !locations.length) return null;
+
+  return (
+    <div id={id} role="listbox" className="absolute z-20 mt-2 max-h-80 w-full overflow-auto rounded-lg border border-ink/10 bg-white p-2 shadow-soft">
+      {locations.map((location) => (
+        <button
+          key={location.id}
+          type="button"
+          role="option"
+          aria-selected={selectedValue === location.label}
+          className="focus-ring grid w-full gap-2 rounded-lg px-3 py-3 text-left transition hover:bg-reef/10"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onSelect(location)}
+        >
+          <span className="flex items-center justify-between gap-3">
+            <span className="font-semibold">{location.label}</span>
+            <span className="shrink-0 text-xs font-medium capitalize text-ink/52">{location.source}</span>
+          </span>
+          <span className="flex flex-wrap items-center gap-2 text-xs text-ink/58">
+            {location.costLevel ? <span className="rounded bg-ink/6 px-2 py-1">Cost {location.costLevel}/5</span> : null}
+            {location.detail ? <span className="rounded bg-ink/6 px-2 py-1">{location.detail}</span> : null}
+            {location.bestFor?.slice(0, 3).map((interest) => (
+              <span key={interest} className="rounded bg-coral/10 px-2 py-1 text-coral">
+                {interest}
+              </span>
+            ))}
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }
 

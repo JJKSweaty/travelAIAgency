@@ -66,7 +66,7 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
     notes: [
       "Prices are planning estimates and should be verified before booking.",
       priceComparison.data[0].sourceNote,
-      destinations.source === "fallback" ? "Destination ranking is using curated fallback trend data." : "Destination ranking uses live trend data.",
+      destinations.source === "fallback" ? "Destination ranking uses curated trend seeds and supports custom free-text destinations." : "Destination ranking uses live trend data.",
       ...(destinations.warnings ?? []),
       ...budget.warnings
     ]
@@ -105,6 +105,7 @@ export function providerHealth() {
   return {
     configuredProviders: {
       destinations: process.env.TRAVEL_TRENDS_API_KEY ? "live-ready" : "fallback",
+      locations: "open-meteo-geocoding",
       hotels: process.env.HOTELS_API_KEY ? "live-ready" : "fallback",
       priceComparison: process.env.TRAVEL_PRICE_API_KEY ? "live-ready" : "fallback",
       cars: process.env.CARS_API_KEY ? "live-ready" : "fallback",
