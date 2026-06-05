@@ -26,6 +26,15 @@ describe("destination providers", () => {
     expect(suggestDestinations("beaches").some((destination) => destination.bestFor.includes("beaches"))).toBe(true);
   });
 
+  it("includes Tokyo in curated suggestions", () => {
+    expect(suggestDestinations("tok")[0].name).toBe("Tokyo");
+  });
+
+  it("returns a custom suggestion when no curated destination matches", () => {
+    const suggestions = suggestDestinations("Atlantis");
+    expect(suggestions[0]).toMatchObject({ name: "Atlantis", country: "Custom destination" });
+  });
+
   it("keeps exact preferred destinations ahead of trending results", async () => {
     const provider = new FallbackDestinationTrendProvider();
     const result = await provider.findDestinations(request);
@@ -35,7 +44,7 @@ describe("destination providers", () => {
   it("warns when free text does not match the curated index", async () => {
     const provider = new FallbackDestinationTrendProvider();
     const result = await provider.findDestinations({ ...request, destination: "Atlantis" });
-    expect(result.data[0].name.length).toBeGreaterThan(0);
+    expect(result.data[0].name).toBe("Atlantis");
     expect(result.warnings?.[0]).toContain("not in the curated index");
   });
 });

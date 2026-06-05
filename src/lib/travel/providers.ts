@@ -61,15 +61,16 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
       .map((entry) => entry.destination);
     const topDestination = scored[0];
     const matchedPreferred = Boolean(normalized && topDestination && destinationMatchesQuery(topDestination, normalized));
+    const data = request.preferredDestinationEnabled && normalized && !matchedPreferred ? [customDestination(request), ...scored] : scored;
     const warnings = [
       ...(request.preferredDestinationEnabled && !normalized ? ["Destination preference was enabled but no destination was provided."] : []),
       ...(request.preferredDestinationEnabled && normalized && !matchedPreferred
-        ? [`"${request.destination}" is not in the curated index yet, so the closest ranked destination was used.`]
+        ? [`"${request.destination}" is not in the curated index yet, so generic fallback estimates were used for that destination.`]
         : [])
     ];
 
     return {
-      data: scored,
+      data,
       source: "fallback",
       providerName: "Curated destination trend index",
       confidence: 0.72,
@@ -92,7 +93,8 @@ export function suggestDestinations(query: string, limit = 8): DestinationOption
     .slice(0, limit)
     .map((entry) => entry.destination);
 
-  return ranked;
+  if (!normalized || ranked.some((destination) => destinationMatchesQuery(destination, normalized))) return ranked;
+  return [customDestination({ destination: query, interests: ["food", "museums", "nature"], totalBudget: 2400, tripLengthDays: 5, travelers: 2 } as TripRequest), ...ranked].slice(0, limit);
 }
 
 export class FallbackHotelSearchProvider implements HotelSearchProvider {
@@ -200,6 +202,37 @@ function destinationMatchesQuery(destination: DestinationOption, normalized: str
   const name = destination.name.toLowerCase();
   const country = destination.country.toLowerCase();
   return name === normalized || name.includes(normalized) || `${name}, ${country}` === normalized;
+}
+
+function customDestination(request: TripRequest): DestinationOption {
+  const name = titleCase(request.destination?.trim() || "Custom destination");
+  const costLevel = budgetCostTarget(request.totalBudget, request.tripLengthDays, request.travelers);
+  return {
+    id: `custom-${slugify(name)}`,
+    name,
+    country: "Custom destination",
+    summary: "A user-entered destination planned with generic fallback estimates. Open linked sources to verify local prices and availability.",
+    imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
+    costLevel,
+    trendingScore: 70,
+    bestFor: request.interests.slice(0, 4),
+    averageNightlyHotel: costLevel >= 5 ? 285 : costLevel === 4 ? 220 : costLevel === 3 ? 155 : 105,
+    averageDailyFood: costLevel >= 5 ? 98 : costLevel === 4 ? 82 : costLevel === 3 ? 58 : 38,
+    averageDailyActivities: costLevel >= 5 ? 86 : costLevel === 4 ? 68 : costLevel === 3 ? 46 : 32,
+    bookingLink: `https://www.google.com/travel/explore?q=${encodeURIComponent(name)}`
+  };
+}
+
+function titleCase(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "destination";
 }
 
 function interestLabel(interest?: Interest): string {
