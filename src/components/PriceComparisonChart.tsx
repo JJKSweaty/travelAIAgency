@@ -49,7 +49,7 @@ function QuoteGroup({ title, icon, quotes }: { title: string; icon: React.ReactN
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink/50">
                 <span>{quote.source === "live" ? "Live provider price" : "Planner estimate"}</span>
                 <span className="inline-flex items-center gap-1 font-medium text-reef">
-                  Open live search
+                  {quote.linkLabel ?? "Open provider search"}
                   <ExternalLink size={12} aria-hidden />
                 </span>
               </div>

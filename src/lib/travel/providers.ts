@@ -144,16 +144,18 @@ export class FallbackAttractionProvider implements AttractionProvider {
 
 export class FallbackTravelPriceProvider implements TravelPriceProvider {
   async comparePrices(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<PriceComparison>> {
-    const flights = flightQuotesFor(destination, request).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
-    const hotels = hotelMarketQuotesFor(destination, request).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
+    const flightsByPrice = flightQuotesFor(destination, request).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
+    const hotelsByPrice = hotelMarketQuotesFor(destination, request).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
+    const flights = [...flightsByPrice].sort(exactSearchFirst);
+    const hotels = [...hotelsByPrice].sort(exactSearchFirst);
 
     return {
       data: [
         {
           flights,
           hotels,
-          lowestFlight: flights[0],
-          lowestHotel: hotels[0],
+          lowestFlight: flightsByPrice[0],
+          lowestHotel: hotelsByPrice[0],
           sourceNote: "Fallback estimates from major travel search surfaces. Open source links to verify live prices before booking."
         }
       ],
@@ -162,6 +164,12 @@ export class FallbackTravelPriceProvider implements TravelPriceProvider {
       confidence: 0.58
     };
   }
+}
+
+function exactSearchFirst<T extends { linkLabel?: string; estimatedPrice: number }>(a: T, b: T) {
+  const exactA = a.linkLabel?.startsWith("Exact") ? 1 : 0;
+  const exactB = b.linkLabel?.startsWith("Exact") ? 1 : 0;
+  return exactB - exactA || a.estimatedPrice - b.estimatedPrice;
 }
 
 export class FallbackItineraryGenerator implements ItineraryGenerator {

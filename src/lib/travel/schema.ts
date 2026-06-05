@@ -4,6 +4,7 @@ export const tripRequestSchema = z.object({
   origin: z.string().min(2),
   preferredDestinationEnabled: z.boolean(),
   destination: z.string().optional(),
+  dateMode: z.enum(["month", "exact"]).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   tripLengthDays: z.coerce.number().int().min(1).max(21),

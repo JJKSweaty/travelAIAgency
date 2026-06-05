@@ -24,6 +24,13 @@ describe("planTrip", () => {
     expect(plan.itinerary).toHaveLength(4);
   });
 
+  it("surfaces exact Google travel searches first when exact dates are provided", async () => {
+    const plan = await planTrip({ ...request, dateMode: "exact", startDate: "2026-07-10", endDate: "2026-07-14", tripLengthDays: 5 });
+    expect(plan.priceComparison.flights[0]).toMatchObject({ provider: "google-flights", linkLabel: "Exact flight search" });
+    expect(plan.priceComparison.hotels[0]).toMatchObject({ provider: "google-hotels", linkLabel: "Exact hotel search" });
+    expect(decodeURIComponent(plan.priceComparison.hotels[0].link)).toContain("check-in Jul 10, 2026");
+  });
+
   it("handles trending mode without a destination", async () => {
     const plan = await planTrip({ ...request, preferredDestinationEnabled: false, destination: "" });
     expect(plan.destination.name.length).toBeGreaterThan(0);
@@ -43,6 +50,10 @@ describe("planTrip", () => {
     const plan = await planTrip(request);
     const cheaper = await refineTrip(plan, "cheaper");
     expect(cheaper.request.totalBudget).toBeLessThan(plan.request.totalBudget);
+    expect(cheaper.request.preferredDestinationEnabled).toBe(false);
+    expect(cheaper.request.transportPreference).toBe("public-transit");
+    expect(cheaper.request.excludedDestinationIds).toContain(plan.destination.id);
+    expect(cheaper.budget.totalEstimated).toBeLessThan(plan.budget.totalEstimated);
     expect(cheaper.notes[0]).toContain("cheaper");
   });
 

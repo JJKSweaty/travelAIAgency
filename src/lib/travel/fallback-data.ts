@@ -472,7 +472,7 @@ export function hotelsFor(destination: DestinationOption, request?: TripRequest)
       nightlyPrice: Math.round(destination.averageNightlyHotel * 1.18),
       rating: 4.6,
       source: "Fallback hotel index",
-      link: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(destinationText)}`,
+      link: bookingHotelLink(destinationText, request),
       confidence: 0.7
     },
     {
@@ -492,10 +492,10 @@ export function flightQuotesFor(destination: DestinationOption, request: TripReq
   const route = flightSearchText(destination, request);
   const base = Math.round((destination.costLevel * 115 + destination.trendingScore * 2.4) * request.travelers);
   const providers = [
-    { provider: "google-flights", displayName: "Google Flights", factor: 0.96, link: `https://www.google.com/travel/flights?q=${encodeURIComponent(route)}` },
-    { provider: "kayak", displayName: "KAYAK", factor: 1.02, link: `https://www.kayak.com/flights?query=${encodeURIComponent(route)}` },
-    { provider: "expedia", displayName: "Expedia", factor: 1.08, link: `https://www.expedia.com/Flights-Search?trip=roundtrip&leg1=from:${encodeURIComponent(request.origin)},to:${encodeURIComponent(destinationLabel(destination))}` },
-    { provider: "skyscanner", displayName: "Skyscanner", factor: 0.99, link: `https://www.skyscanner.com/transport/flights/?query=${encodeURIComponent(route)}` }
+    { provider: "google-flights", displayName: "Google Flights", factor: 0.96, link: `https://www.google.com/travel/flights?q=${encodeURIComponent(route)}`, linkLabel: "Exact flight search" },
+    { provider: "kayak", displayName: "KAYAK", factor: 1.02, link: `https://www.kayak.com/flights`, linkLabel: "Open provider search" },
+    { provider: "expedia", displayName: "Expedia", factor: 1.08, link: `https://www.expedia.com/Flights`, linkLabel: "Open provider search" },
+    { provider: "skyscanner", displayName: "Skyscanner", factor: 0.99, link: `https://www.skyscanner.com/transport/flights/`, linkLabel: "Open provider search" }
   ];
 
   return providers.map((item) => ({
@@ -508,7 +508,8 @@ export function flightQuotesFor(destination: DestinationOption, request: TripReq
     link: item.link,
     source: "fallback",
     confidence: 0.58,
-    lastChecked: new Date().toISOString()
+    lastChecked: new Date().toISOString(),
+    linkLabel: item.linkLabel
   }));
 }
 
@@ -516,11 +517,11 @@ export function hotelMarketQuotesFor(destination: DestinationOption, request?: T
   const destinationText = destinationLabel(destination);
   const searchText = hotelSearchText(destination, request);
   const providers = [
-    { provider: "google-hotels", displayName: "Google Hotels", factor: 0.97, link: `https://www.google.com/travel/hotels?q=${encodeURIComponent(searchText)}` },
-    { provider: "booking", displayName: "Booking.com", factor: 1.03, link: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(destinationText)}` },
-    { provider: "expedia", displayName: "Expedia", factor: 1.07, link: `https://www.expedia.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}` },
-    { provider: "hotels", displayName: "Hotels.com", factor: 1.01, link: `https://www.hotels.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}` },
-    { provider: "tripadvisor", displayName: "Tripadvisor", factor: 0.94, link: `https://www.tripadvisor.com/Search?q=${encodeURIComponent(searchText)}` }
+    { provider: "google-hotels", displayName: "Google Hotels", factor: 0.97, link: `https://www.google.com/travel/hotels?q=${encodeURIComponent(searchText)}`, linkLabel: "Exact hotel search" },
+    { provider: "booking", displayName: "Booking.com", factor: 1.03, link: bookingHotelLink(destinationText, request), linkLabel: hasExactDates(request) ? "Exact hotel search" : "Open hotel search" },
+    { provider: "expedia", displayName: "Expedia", factor: 1.07, link: `https://www.expedia.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}`, linkLabel: "Open provider search" },
+    { provider: "hotels", displayName: "Hotels.com", factor: 1.01, link: `https://www.hotels.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}`, linkLabel: "Open provider search" },
+    { provider: "tripadvisor", displayName: "Tripadvisor", factor: 0.94, link: `https://www.tripadvisor.com/Search?q=${encodeURIComponent(searchText)}`, linkLabel: "Open hotel search" }
   ];
 
   return providers.map((item) => ({
@@ -533,7 +534,8 @@ export function hotelMarketQuotesFor(destination: DestinationOption, request?: T
     link: item.link,
     source: "fallback",
     confidence: 0.6,
-    lastChecked: new Date().toISOString()
+    lastChecked: new Date().toISOString(),
+    linkLabel: item.linkLabel
   }));
 }
 
@@ -594,18 +596,24 @@ export function attractionsFor(destination: DestinationOption): AttractionOption
 }
 
 function flightSearchText(destination: DestinationOption, request: TripRequest) {
-  return [`Flights from ${request.origin} to ${destinationLabel(destination)}`, travelMonthLabel(request)].filter(Boolean).join(" ");
+  return [`from ${request.origin} to ${destinationLabel(destination)}`, travelDateLabel(request, "flight")].filter(Boolean).join(" ");
 }
 
 function hotelSearchText(destination: DestinationOption, request?: TripRequest) {
-  return [`${destinationLabel(destination)} hotels`, request ? travelMonthLabel(request) : ""].filter(Boolean).join(" ");
+  return [`${destinationLabel(destination)} hotels`, request ? travelDateLabel(request, "hotel") : ""].filter(Boolean).join(" ");
 }
 
 function destinationLabel(destination: DestinationOption) {
   return destination.country && destination.country !== "Global destination" ? `${destination.name}, ${destination.country}` : destination.name;
 }
 
-function travelMonthLabel(request: TripRequest) {
+function travelDateLabel(request: TripRequest, category: "flight" | "hotel") {
+  const exact = exactDateRange(request);
+  if (exact) {
+    const start = formatDateLabel(exact.startDate);
+    const end = formatDateLabel(exact.endDate);
+    return category === "flight" ? `depart ${start} return ${end}` : `check-in ${start} check-out ${end}`;
+  }
   const value = request.startDate?.trim();
   if (!value) return "";
   const monthMatch = /^(\d{4})-(\d{2})$/.exec(value);
@@ -613,4 +621,46 @@ function travelMonthLabel(request: TripRequest) {
   const [, year, month] = monthMatch;
   const date = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
   return date.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function bookingHotelLink(destination: string, request?: TripRequest) {
+  const url = new URL("https://www.booking.com/searchresults.html");
+  url.searchParams.set("ss", destination);
+  const exact = request ? exactDateRange(request) : null;
+  if (exact) {
+    url.searchParams.set("checkin", exact.startDate);
+    url.searchParams.set("checkout", exact.endDate);
+    url.searchParams.set("group_adults", String(request?.travelers ?? 2));
+    url.searchParams.set("no_rooms", String(Math.max(1, Math.ceil((request?.travelers ?? 2) / 2))));
+  }
+  return url.toString();
+}
+
+function hasExactDates(request?: TripRequest) {
+  return Boolean(request && exactDateRange(request));
+}
+
+function exactDateRange(request: TripRequest) {
+  const startDate = request.startDate;
+  if (request.dateMode !== "exact" || !isDateOnly(startDate)) return null;
+  return {
+    startDate,
+    endDate: isDateOnly(request.endDate) ? request.endDate : addDays(startDate, Math.max(0, request.tripLengthDays - 1))
+  };
+}
+
+function formatDateLabel(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+function addDays(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isDateOnly(value?: string): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 }

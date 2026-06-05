@@ -74,4 +74,15 @@ describe("TripPlannerWizard", () => {
     await user.click(await screen.findByRole("option", { name: /toronto/i }));
     expect(screen.getByRole("combobox", { name: /origin/i })).toHaveValue("Toronto, Canada");
   });
+
+  it("supports exact travel dates and keeps trip length aligned", async () => {
+    const user = userEvent.setup();
+    render(<TripPlannerWizard />);
+    await user.click(screen.getByRole("button", { name: /^exact$/i }));
+    await user.type(screen.getByLabelText(/depart/i), "2026-07-10");
+    expect(screen.getByLabelText(/return/i)).toHaveValue("2026-07-14");
+    await user.clear(screen.getByLabelText(/return/i));
+    await user.type(screen.getByLabelText(/return/i), "2026-07-17");
+    expect(screen.getByLabelText(/trip length/i)).toHaveValue(8);
+  });
 });

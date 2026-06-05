@@ -52,6 +52,10 @@ async function callOllama(args: ItineraryArgs): Promise<unknown> {
         model: process.env.OLLAMA_MODEL,
         stream: false,
         format: "json",
+        options: {
+          temperature: Number(process.env.OLLAMA_TEMPERATURE ?? 0.85),
+          top_p: Number(process.env.OLLAMA_TOP_P ?? 0.9)
+        },
         prompt: buildPrompt(args)
       })
     });
@@ -68,7 +72,7 @@ async function callOllama(args: ItineraryArgs): Promise<unknown> {
 function buildPrompt({ destination, request, restaurants, attractions }: ItineraryArgs) {
   return JSON.stringify({
     instruction:
-      "Return JSON only. Create a readable travel itinerary using the provided restaurants and attractions. Do not include booking or exact price claims.",
+      "Return JSON only. Create a vivid, fun, locally specific travel itinerary using the provided restaurants and attractions. Avoid generic filler like 'explore the city' unless it is tied to a concrete place, neighborhood, food, view, route, or rhythm. Keep each segment practical, concise, and energetic. Do not include booking claims or exact price claims.",
     schema: {
       itinerary: [
         {
@@ -83,10 +87,16 @@ function buildPrompt({ destination, request, restaurants, attractions }: Itinera
     },
     trip: {
       destination: `${destination.name}, ${destination.country}`,
+      origin: request.origin,
       days: request.tripLengthDays,
+      dateMode: request.dateMode ?? "month",
+      startDate: request.startDate,
+      endDate: request.endDate,
       travelers: request.travelers,
       style: request.travelStyle,
-      interests: request.interests
+      interests: request.interests,
+      budget: request.totalBudget,
+      transportPreference: request.transportPreference
     },
     restaurants: restaurants.map((restaurant) => ({
       name: restaurant.name,

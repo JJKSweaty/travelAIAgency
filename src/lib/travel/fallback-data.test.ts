@@ -28,4 +28,19 @@ describe("fallback travel links", () => {
     expect(quotes.every((quote) => new URL(quote.link).protocol === "https:")).toBe(true);
     expect(decodeURIComponent(quotes[0].link)).toContain("Lisbon, Portugal");
   });
+
+  it("builds exact date flight and hotel search links when exact dates are selected", () => {
+    const exactRequest = { ...request, dateMode: "exact" as const, startDate: "2026-07-10", endDate: "2026-07-14", tripLengthDays: 5 };
+    const flight = flightQuotesFor(destinations[0], exactRequest)[0];
+    const hotels = hotelMarketQuotesFor(destinations[0], exactRequest);
+    const googleHotel = hotels[0];
+    const booking = hotels[1];
+
+    expect(flight.linkLabel).toBe("Exact flight search");
+    expect(decodeURIComponent(flight.link)).toContain("depart Jul 10, 2026 return Jul 14, 2026");
+    expect(googleHotel.linkLabel).toBe("Exact hotel search");
+    expect(decodeURIComponent(googleHotel.link)).toContain("check-in Jul 10, 2026 check-out Jul 14, 2026");
+    expect(booking.link).toContain("checkin=2026-07-10");
+    expect(booking.link).toContain("checkout=2026-07-14");
+  });
 });

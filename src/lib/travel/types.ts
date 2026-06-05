@@ -1,6 +1,7 @@
 export type TravelStyle = "relaxed" | "balanced" | "packed";
 export type TransportPreference = "rental-car" | "public-transit" | "flexible";
 export type LocationSuggestionMode = "origin" | "destination";
+export type TravelDateMode = "month" | "exact";
 export type Interest =
   | "food"
   | "nightlife"
@@ -16,6 +17,7 @@ export type TripRequest = {
   origin: string;
   preferredDestinationEnabled: boolean;
   destination?: string;
+  dateMode?: TravelDateMode;
   startDate?: string;
   endDate?: string;
   tripLengthDays: number;
@@ -134,6 +136,7 @@ export type PriceQuote = {
   source: "live" | "fallback";
   confidence: number;
   lastChecked: string;
+  linkLabel?: string;
 };
 
 export type PriceComparison = {

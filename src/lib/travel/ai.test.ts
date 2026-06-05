@@ -38,6 +38,8 @@ describe("OllamaItineraryGenerator", () => {
     vi.restoreAllMocks();
     delete process.env.OLLAMA_MODEL;
     delete process.env.OLLAMA_BASE_URL;
+    delete process.env.OLLAMA_TEMPERATURE;
+    delete process.env.OLLAMA_TOP_P;
   });
 
   it("normalizes structured Ollama itinerary output", async () => {
@@ -57,6 +59,27 @@ describe("OllamaItineraryGenerator", () => {
     const result = await new OllamaItineraryGenerator().generateItinerary({ destination, request, restaurants, attractions });
     expect(result.source).toBe("live");
     expect(result.data[0]).toMatchObject({ day: 1, title: "Market day", estimatedCost: 95 });
+  });
+
+  it("asks Ollama for vivid itinerary JSON with creative generation options", async () => {
+    process.env.OLLAMA_MODEL = "llama3.1";
+    process.env.OLLAMA_TEMPERATURE = "0.9";
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        response: JSON.stringify({
+          itinerary: [{ title: "Tile hunt", morning: "Start with tiled lanes.", afternoon: "Ride to the tasting route.", evening: "Dinner near Old town.", estimatedCost: 88 }]
+        })
+      })
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new OllamaItineraryGenerator().generateItinerary({ destination, request: { ...request, dateMode: "exact", startDate: "2026-07-10", endDate: "2026-07-14" }, restaurants, attractions });
+    const payload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+    const prompt = JSON.parse(payload.prompt);
+    expect(payload.options.temperature).toBe(0.9);
+    expect(prompt.instruction).toContain("vivid, fun, locally specific");
+    expect(prompt.trip).toMatchObject({ origin: "Toronto", dateMode: "exact", startDate: "2026-07-10" });
   });
 
   it("falls back when Ollama returns invalid JSON", async () => {

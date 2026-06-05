@@ -80,8 +80,14 @@ export async function refineTrip(plan: TripPlan, intent: RefinementIntent): Prom
   const nextRequest: TripRequest = { ...plan.request };
 
   if (intent === "cheaper") {
-    nextRequest.totalBudget = Math.max(250, Math.round(nextRequest.totalBudget * 0.88));
+    nextRequest.totalBudget = Math.max(250, Math.min(nextRequest.totalBudget, Math.round(plan.budget.totalEstimated * 0.92)));
+    nextRequest.preferredDestinationEnabled = false;
+    nextRequest.destination = "";
+    nextRequest.transportPreference = "public-transit";
+    nextRequest.travelStyle = "relaxed";
     nextRequest.interests = Array.from(new Set([...nextRequest.interests, "budget"]));
+    nextRequest.excludedDestinationIds = Array.from(new Set([...(nextRequest.excludedDestinationIds ?? []), plan.destination.id]));
+    nextRequest.excludedHotelIds = [];
   }
   if (intent === "luxury") {
     nextRequest.totalBudget = Math.round(nextRequest.totalBudget * 1.18);

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Sparkles, Users } from "lucide-react";
 import { writeCurrentTrip } from "@/lib/travel/storage";
-import type { Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
+import type { Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
 
 const interestOptions: { id: Interest; label: string }[] = [
   { id: "food", label: "Food" },
@@ -22,6 +22,7 @@ const initialRequest: TripRequest = {
   origin: "Toronto",
   preferredDestinationEnabled: false,
   destination: "",
+  dateMode: "month",
   startDate: "",
   endDate: "",
   tripLengthDays: 5,
@@ -177,11 +178,36 @@ export function TripPlannerWizard() {
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Travel month" icon={<CalendarDays size={17} />}>
-              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="month" value={request.startDate ?? ""} onChange={(event) => setRequest({ ...request, startDate: event.target.value })} />
+            <Field label="Date mode" icon={<CalendarDays size={17} />}>
+              <div className="grid grid-cols-2 rounded-lg border border-ink/10 bg-white p-1">
+                {(["month", "exact"] as TravelDateMode[]).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={`focus-ring rounded-md px-3 py-2 text-sm font-semibold capitalize transition ${request.dateMode === mode ? "bg-ink text-paper" : "text-ink/68 hover:bg-ink/6"}`}
+                    onClick={() => setRequest({ ...request, dateMode: mode, startDate: "", endDate: "" })}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
             </Field>
+            {request.dateMode === "exact" ? (
+              <>
+                <Field label="Depart" icon={<CalendarDays size={17} />}>
+                  <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="date" value={request.startDate ?? ""} onChange={(event) => setRequest(syncExactStartDate(request, event.target.value))} />
+                </Field>
+                <Field label="Return" icon={<CalendarDays size={17} />}>
+                  <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="date" value={request.endDate ?? ""} onChange={(event) => setRequest(syncExactEndDate(request, event.target.value))} />
+                </Field>
+              </>
+            ) : (
+              <Field label="Travel month" icon={<CalendarDays size={17} />}>
+                <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="month" value={request.startDate ?? ""} onChange={(event) => setRequest({ ...request, dateMode: "month", startDate: event.target.value, endDate: "" })} />
+              </Field>
+            )}
             <Field label="Trip length" icon={<CalendarDays size={17} />}>
-              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={1} max={21} value={request.tripLengthDays} onChange={(event) => setRequest({ ...request, tripLengthDays: Number(event.target.value) })} />
+              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={1} max={21} value={request.tripLengthDays} onChange={(event) => setRequest(syncTripLength(request, Number(event.target.value)))} />
             </Field>
             <Field label="Travelers" icon={<Users size={17} />}>
               <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={1} max={12} value={request.travelers} onChange={(event) => setRequest({ ...request, travelers: Number(event.target.value) })} />
@@ -339,6 +365,45 @@ function LocationSuggestionList({
       ))}
     </div>
   );
+}
+
+function syncExactStartDate(request: TripRequest, startDate: string): TripRequest {
+  if (!startDate) return { ...request, dateMode: "exact", startDate, endDate: "" };
+  const endDate = request.endDate && daysBetween(startDate, request.endDate) > 0 ? request.endDate : addDays(startDate, request.tripLengthDays - 1);
+  return { ...request, dateMode: "exact", startDate, endDate };
+}
+
+function syncExactEndDate(request: TripRequest, endDate: string): TripRequest {
+  if (!request.startDate || !endDate) return { ...request, dateMode: "exact", endDate };
+  const days = daysBetween(request.startDate, endDate);
+  return { ...request, dateMode: "exact", endDate, tripLengthDays: days > 0 ? Math.min(21, Math.max(1, days + 1)) : request.tripLengthDays };
+}
+
+function syncTripLength(request: TripRequest, tripLengthDays: number): TripRequest {
+  const nextLength = Math.min(21, Math.max(1, tripLengthDays));
+  if (request.dateMode !== "exact" || !request.startDate) return { ...request, tripLengthDays: nextLength };
+  return { ...request, tripLengthDays: nextLength, endDate: addDays(request.startDate, nextLength - 1) };
+}
+
+function addDays(dateValue: string, days: number) {
+  const date = parseDateOnly(dateValue);
+  if (!date) return "";
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetween(startDate: string, endDate: string) {
+  const start = parseDateOnly(startDate);
+  const end = parseDateOnly(endDate);
+  if (!start || !end) return 0;
+  return Math.round((end.getTime() - start.getTime()) / 86400000);
+}
+
+function parseDateOnly(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
 }
 
 function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
