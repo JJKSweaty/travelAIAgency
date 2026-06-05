@@ -1,4 +1,4 @@
-import { Plane, BedDouble } from "lucide-react";
+import { BedDouble, ExternalLink, Plane } from "lucide-react";
 import type { PriceComparison, PriceQuote } from "@/lib/travel/types";
 
 export function PriceComparisonChart({ comparison }: { comparison: PriceComparison }) {
@@ -7,7 +7,7 @@ export function PriceComparisonChart({ comparison }: { comparison: PriceComparis
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">Price comparison</h2>
-          <p className="mt-1 text-sm text-ink/60">Estimated source-by-source prices. Open a source to verify live availability.</p>
+          <p className="mt-1 text-sm text-ink/60">Planner estimates with live-search links. Open a source to see current provider prices.</p>
         </div>
         <div className="hidden rounded-lg bg-reef/10 px-3 py-2 text-sm font-semibold text-reef sm:block">
           {comparison.lowestFlight && comparison.lowestHotel
@@ -46,9 +46,12 @@ function QuoteGroup({ title, icon, quotes }: { title: string; icon: React.ReactN
               <div className="mt-2 h-2 rounded-full bg-ink/10">
                 <div className={`h-2 rounded-full ${index === 0 ? "bg-reef" : "bg-gold"}`} style={{ width: `${width}%` }} />
               </div>
-              <div className="mt-2 flex justify-between text-xs text-ink/50">
-                <span>{quote.source === "live" ? "Live quote" : "Estimated quote"}</span>
-                <span>{Math.round(quote.confidence * 100)}% confidence</span>
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink/50">
+                <span>{quote.source === "live" ? "Live provider price" : "Planner estimate"}</span>
+                <span className="inline-flex items-center gap-1 font-medium text-reef">
+                  Open live search
+                  <ExternalLink size={12} aria-hidden />
+                </span>
               </div>
             </a>
           );

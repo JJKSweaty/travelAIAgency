@@ -176,7 +176,10 @@ export function TripPlannerWizard() {
             </Field>
           ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="Travel month" icon={<CalendarDays size={17} />}>
+              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="month" value={request.startDate ?? ""} onChange={(event) => setRequest({ ...request, startDate: event.target.value })} />
+            </Field>
             <Field label="Trip length" icon={<CalendarDays size={17} />}>
               <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={1} max={21} value={request.tripLengthDays} onChange={(event) => setRequest({ ...request, tripLengthDays: Number(event.target.value) })} />
             </Field>

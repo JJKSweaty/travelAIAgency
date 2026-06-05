@@ -25,6 +25,8 @@ export type TripRequest = {
   interests: Interest[];
   transportPreference: TransportPreference;
   excludedDestinationIds?: string[];
+  excludedHotelIds?: string[];
+  itineraryVariant?: number;
 };
 
 export type ProviderResult<T> = {

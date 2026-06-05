@@ -1,3 +1,4 @@
+import { allocateBudget } from "./budget";
 import { attractionsFor, carsFor, destinations, flightQuotesFor, hotelMarketQuotesFor, hotelsFor, restaurantsFor } from "./fallback-data";
 import { locationSlug, parseLocationLabel } from "./locations";
 import type {
@@ -50,17 +51,32 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
   async findDestinations(request: TripRequest): Promise<ProviderResult<DestinationOption>> {
     const normalized = request.destination?.trim().toLowerCase();
     const excluded = new Set(request.excludedDestinationIds ?? []);
+    let hasBudgetFit = false;
     const scored = destinations
       .filter((destination) => !excluded.has(destination.id))
-      .map((destination) => ({
-        destination,
-        score:
-          destination.trendingScore +
-          destination.bestFor.filter((interest) => request.interests.includes(interest)).length * 8 -
-          Math.abs(destination.costLevel - budgetCostTarget(request.totalBudget, request.tripLengthDays, request.travelers)) * 5 +
-          destinationMatchScore(destination, normalized)
-      }))
-      .sort((a, b) => b.score - a.score)
+      .map((destination) => {
+        const budget = allocateBudget(request, destination);
+        const matchScore = destinationMatchScore(destination, normalized);
+        const preferredMatch = Boolean(request.preferredDestinationEnabled && normalized && destinationMatchesQuery(destination, normalized));
+        if (budget.remaining >= 0) hasBudgetFit = true;
+
+        return {
+          destination,
+          preferredMatch,
+          score:
+            budgetFitRankScore(budget.remaining, budget.feasibility) +
+            destination.trendingScore * 0.35 +
+            destination.bestFor.filter((interest) => request.interests.includes(interest)).length * 14 -
+            Math.abs(destination.costLevel - budgetCostTarget(request.totalBudget, request.tripLengthDays, request.travelers)) * 3 +
+            matchScore
+        };
+      })
+      .sort((a, b) => {
+        if (request.preferredDestinationEnabled && normalized && a.preferredMatch !== b.preferredMatch) {
+          return a.preferredMatch ? -1 : 1;
+        }
+        return b.score - a.score;
+      })
       .map((entry) => entry.destination);
     const rankedDestinations = scored.length ? scored : destinations;
     const topDestination = rankedDestinations[0];
@@ -70,7 +86,8 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
       ...(request.preferredDestinationEnabled && !normalized ? ["Destination preference was enabled but no destination was provided."] : []),
       ...(request.preferredDestinationEnabled && normalized && !matchedPreferred
         ? [`"${request.destination}" is being planned as a custom global destination with generic fallback estimates. Verify local prices and availability before booking.`]
-        : [])
+        : []),
+      ...(!request.preferredDestinationEnabled && !hasBudgetFit ? ["No curated destination fits this budget cleanly, so the lowest-cost fallback option was selected."] : [])
     ];
 
     return {
@@ -102,8 +119,8 @@ export function suggestDestinations(query: string, limit = 8): DestinationOption
 }
 
 export class FallbackHotelSearchProvider implements HotelSearchProvider {
-  async searchHotels(destination: DestinationOption): Promise<ProviderResult<HotelOption>> {
-    return { data: hotelsFor(destination), source: "fallback", providerName: "Fallback hotel index", confidence: 0.7 };
+  async searchHotels(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<HotelOption>> {
+    return { data: hotelsFor(destination, request), source: "fallback", providerName: "Fallback hotel index", confidence: 0.7 };
   }
 }
 
@@ -128,7 +145,7 @@ export class FallbackAttractionProvider implements AttractionProvider {
 export class FallbackTravelPriceProvider implements TravelPriceProvider {
   async comparePrices(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<PriceComparison>> {
     const flights = flightQuotesFor(destination, request).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
-    const hotels = hotelMarketQuotesFor(destination).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
+    const hotels = hotelMarketQuotesFor(destination, request).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
 
     return {
       data: [
@@ -159,9 +176,10 @@ export class FallbackItineraryGenerator implements ItineraryGenerator {
     restaurants: RestaurantOption[];
     attractions: AttractionOption[];
   }): Promise<ProviderResult<ItineraryDay>> {
+    const variantOffset = Math.max(0, request.itineraryVariant ?? 0);
     const days = Array.from({ length: request.tripLengthDays }, (_, index) => {
-      const attraction = attractions[index % Math.max(attractions.length, 1)];
-      const restaurant = restaurants[index % Math.max(restaurants.length, 1)];
+      const attraction = attractions[(index + variantOffset) % Math.max(attractions.length, 1)];
+      const restaurant = restaurants[(index + variantOffset) % Math.max(restaurants.length, 1)];
       const active = request.travelStyle === "packed";
       const relaxed = request.travelStyle === "relaxed";
       return {
@@ -184,6 +202,11 @@ function budgetCostTarget(totalBudget: number, days: number, travelers: number):
   if (perPersonDay < 210) return 3;
   if (perPersonDay < 330) return 4;
   return 5;
+}
+
+function budgetFitRankScore(remaining: number, feasibility: ReturnType<typeof allocateBudget>["feasibility"]): number {
+  if (remaining >= 0) return 160 + (feasibility === "comfortable" ? 30 : 12) + Math.min(60, remaining / 35);
+  return Math.max(-260, remaining / 5);
 }
 
 function destinationMatchScore(destination: DestinationOption, normalized?: string): number {

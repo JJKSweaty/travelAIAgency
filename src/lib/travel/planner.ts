@@ -41,6 +41,9 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
     attractions: attractions.data
   });
   const budget = allocateBudget(request, destination);
+  const sortedHotels = hotels.data.sort((a, b) => a.nightlyPrice - b.nightlyPrice);
+  const availableHotels = sortedHotels.filter((hotel) => !(request.excludedHotelIds ?? []).includes(hotel.id));
+  const recommendedHotels = availableHotels.length ? availableHotels : sortedHotels;
 
   return {
     id: crypto.randomUUID(),
@@ -49,7 +52,7 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
     destination,
     alternates,
     budget,
-    hotels: hotels.data.sort((a, b) => a.nightlyPrice - b.nightlyPrice),
+    hotels: recommendedHotels,
     priceComparison: priceComparison.data[0],
     cars: cars.data.sort((a, b) => a.dailyPrice - b.dailyPrice),
     restaurants: restaurants.data,
@@ -93,6 +96,10 @@ export async function refineTrip(plan: TripPlan, intent: RefinementIntent): Prom
     nextRequest.excludedDestinationIds = Array.from(new Set([...(nextRequest.excludedDestinationIds ?? []), plan.destination.id]));
   }
   if (intent === "replace-hotel") nextRequest.totalBudget = Math.round(nextRequest.totalBudget * 1.04);
+  if (intent === "replace-hotel" && plan.hotels[0]) {
+    nextRequest.excludedHotelIds = Array.from(new Set([...(nextRequest.excludedHotelIds ?? []), plan.hotels[0].id]));
+  }
+  if (intent === "regenerate") nextRequest.itineraryVariant = (nextRequest.itineraryVariant ?? 0) + 1;
 
   const refined = await planTrip(nextRequest);
   return {

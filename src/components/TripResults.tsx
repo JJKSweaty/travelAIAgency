@@ -24,6 +24,7 @@ export function TripResults() {
   const router = useRouter();
   const [plan, setPlan] = useState<TripPlan | null>(null);
   const [isRefining, setIsRefining] = useState<RefinementIntent | null>(null);
+  const [refineError, setRefineError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -34,16 +35,23 @@ export function TripResults() {
   async function refine(intent: RefinementIntent) {
     if (!plan) return;
     setIsRefining(intent);
-    const response = await fetch("/api/refine-trip", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plan, intent })
-    });
-    const next = (await response.json()) as TripPlan;
-    writeCurrentTrip(next);
-    setPlan(next);
-    setSaved(false);
-    setIsRefining(null);
+    setRefineError(null);
+    try {
+      const response = await fetch("/api/refine-trip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan, intent })
+      });
+      if (!response.ok) throw new Error("Could not refine this trip.");
+      const next = (await response.json()) as TripPlan;
+      writeCurrentTrip(next);
+      setPlan(next);
+      setSaved(false);
+    } catch (err) {
+      setRefineError(err instanceof Error ? err.message : "Could not refine this trip.");
+    } finally {
+      setIsRefining(null);
+    }
   }
 
   if (!plan) {
@@ -107,6 +115,7 @@ export function TripResults() {
                 </button>
               ))}
             </div>
+            {refineError ? <p className="mt-3 rounded-lg bg-coral/10 px-3 py-2 text-sm font-medium text-coral">{refineError}</p> : null}
           </Panel>
 
           <PriceComparisonChart comparison={plan.priceComparison} />

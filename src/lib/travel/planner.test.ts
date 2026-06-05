@@ -46,6 +46,20 @@ describe("planTrip", () => {
     expect(cheaper.notes[0]).toContain("cheaper");
   });
 
+  it("replaces the top hotel option", async () => {
+    const plan = await planTrip(request);
+    const next = await refineTrip(plan, "replace-hotel");
+    expect(next.request.excludedHotelIds).toContain(plan.hotels[0].id);
+    expect(next.hotels[0].id).not.toBe(plan.hotels[0].id);
+  });
+
+  it("regenerates fallback itinerary variants", async () => {
+    const plan = await planTrip(request);
+    const next = await refineTrip(plan, "regenerate");
+    expect(next.request.itineraryVariant).toBe((plan.request.itineraryVariant ?? 0) + 1);
+    expect(next.itinerary[0].afternoon).not.toBe(plan.itinerary[0].afternoon);
+  });
+
   it("moves to another destination with the same budget settings", async () => {
     const plan = await planTrip({ ...request, preferredDestinationEnabled: false, destination: "" });
     const next = await refineTrip(plan, "next-destination");

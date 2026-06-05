@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TripResults } from "./TripResults";
 import type { TripPlan } from "@/lib/travel/types";
 
@@ -90,6 +91,11 @@ const plan: TripPlan = {
 };
 
 describe("TripResults", () => {
+  afterEach(() => {
+    window.sessionStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
   it("renders major result sections from the active trip", async () => {
     window.sessionStorage.setItem("aiTravelAgency.currentTrip", JSON.stringify(plan));
     render(<TripResults />);
@@ -101,7 +107,37 @@ describe("TripResults", () => {
     expect(screen.getByText(/morning/i)).toBeInTheDocument();
     expect(screen.getByText(/afternoon/i)).toBeInTheDocument();
     expect(screen.getByText(/about \$25\/meal/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/open live search/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /try another destination/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save trip/i })).toBeInTheDocument();
+  });
+
+  it("posts replace-hotel refinements and renders the updated hotel list", async () => {
+    const user = userEvent.setup();
+    const nextPlan: TripPlan = {
+      ...plan,
+      request: { ...plan.request, excludedHotelIds: ["h"] },
+      hotels: [{ ...plan.hotels[0], id: "h2", name: "Design Stay" }],
+      notes: ["Refined for: replace hotel."]
+    };
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => nextPlan
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    window.sessionStorage.setItem("aiTravelAgency.currentTrip", JSON.stringify(plan));
+
+    render(<TripResults />);
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Lisbon" })).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /replace hotel/i }));
+
+    await waitFor(() => expect(screen.getByText("Design Stay")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/refine-trip",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"intent":"replace-hotel"')
+      })
+    );
   });
 });

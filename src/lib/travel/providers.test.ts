@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { allocateBudget } from "./budget";
 import { FallbackDestinationTrendProvider, suggestDestinations } from "./providers";
 import type { TripRequest } from "./types";
 
@@ -44,6 +45,13 @@ describe("destination providers", () => {
     const provider = new FallbackDestinationTrendProvider();
     const result = await provider.findDestinations(request);
     expect(result.data[0].name).toBe("Seoul");
+  });
+
+  it("prioritizes budget-fitting destinations in trending mode", async () => {
+    const provider = new FallbackDestinationTrendProvider();
+    const budgetRequest = { ...request, preferredDestinationEnabled: false, destination: "", totalBudget: 1700 };
+    const result = await provider.findDestinations(budgetRequest);
+    expect(allocateBudget(budgetRequest, result.data[0]).remaining).toBeGreaterThanOrEqual(0);
   });
 
   it("warns when free text does not match the curated index", async () => {

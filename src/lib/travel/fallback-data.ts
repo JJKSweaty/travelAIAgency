@@ -451,7 +451,9 @@ export const destinations: DestinationOption[] = [
   }
 ];
 
-export function hotelsFor(destination: DestinationOption): HotelOption[] {
+export function hotelsFor(destination: DestinationOption, request?: TripRequest): HotelOption[] {
+  const destinationText = destinationLabel(destination);
+  const searchText = hotelSearchText(destination, request);
   return [
     {
       id: `${destination.id}-hotel-1`,
@@ -460,7 +462,7 @@ export function hotelsFor(destination: DestinationOption): HotelOption[] {
       nightlyPrice: Math.round(destination.averageNightlyHotel * 0.92),
       rating: 4.4,
       source: "Fallback hotel index",
-      link: `https://www.google.com/travel/hotels/${encodeURIComponent(destination.name)}`,
+      link: `https://www.google.com/travel/hotels?q=${encodeURIComponent(searchText)}`,
       confidence: 0.72
     },
     {
@@ -470,7 +472,7 @@ export function hotelsFor(destination: DestinationOption): HotelOption[] {
       nightlyPrice: Math.round(destination.averageNightlyHotel * 1.18),
       rating: 4.6,
       source: "Fallback hotel index",
-      link: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(destination.name)}`,
+      link: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(destinationText)}`,
       confidence: 0.7
     },
     {
@@ -480,20 +482,20 @@ export function hotelsFor(destination: DestinationOption): HotelOption[] {
       nightlyPrice: Math.round(destination.averageNightlyHotel * 0.72),
       rating: 4.1,
       source: "Fallback hotel index",
-      link: `https://www.google.com/search?q=${encodeURIComponent(`${destination.name} budget hotels`)}`,
+      link: `https://www.google.com/search?q=${encodeURIComponent(`${searchText} budget hotels`)}`,
       confidence: 0.67
     }
   ];
 }
 
 export function flightQuotesFor(destination: DestinationOption, request: TripRequest): PriceQuote[] {
-  const route = `${request.origin} to ${destination.name}`;
+  const route = flightSearchText(destination, request);
   const base = Math.round((destination.costLevel * 115 + destination.trendingScore * 2.4) * request.travelers);
   const providers = [
     { provider: "google-flights", displayName: "Google Flights", factor: 0.96, link: `https://www.google.com/travel/flights?q=${encodeURIComponent(route)}` },
-    { provider: "kayak", displayName: "KAYAK", factor: 1.02, link: `https://www.kayak.com/flights/${encodeURIComponent(request.origin)}-${encodeURIComponent(destination.name)}` },
-    { provider: "expedia", displayName: "Expedia", factor: 1.08, link: `https://www.expedia.com/Flights-Search?trip=roundtrip&leg1=from:${encodeURIComponent(request.origin)},to:${encodeURIComponent(destination.name)}` },
-    { provider: "skyscanner", displayName: "Skyscanner", factor: 0.99, link: `https://www.skyscanner.com/transport/flights/${encodeURIComponent(request.origin)}/${encodeURIComponent(destination.name)}/` }
+    { provider: "kayak", displayName: "KAYAK", factor: 1.02, link: `https://www.kayak.com/flights?query=${encodeURIComponent(route)}` },
+    { provider: "expedia", displayName: "Expedia", factor: 1.08, link: `https://www.expedia.com/Flights-Search?trip=roundtrip&leg1=from:${encodeURIComponent(request.origin)},to:${encodeURIComponent(destinationLabel(destination))}` },
+    { provider: "skyscanner", displayName: "Skyscanner", factor: 0.99, link: `https://www.skyscanner.com/transport/flights/?query=${encodeURIComponent(route)}` }
   ];
 
   return providers.map((item) => ({
@@ -510,13 +512,15 @@ export function flightQuotesFor(destination: DestinationOption, request: TripReq
   }));
 }
 
-export function hotelMarketQuotesFor(destination: DestinationOption): PriceQuote[] {
+export function hotelMarketQuotesFor(destination: DestinationOption, request?: TripRequest): PriceQuote[] {
+  const destinationText = destinationLabel(destination);
+  const searchText = hotelSearchText(destination, request);
   const providers = [
-    { provider: "google-hotels", displayName: "Google Hotels", factor: 0.97, link: `https://www.google.com/travel/hotels/${encodeURIComponent(destination.name)}` },
-    { provider: "booking", displayName: "Booking.com", factor: 1.03, link: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(destination.name)}` },
-    { provider: "expedia", displayName: "Expedia", factor: 1.07, link: `https://www.expedia.com/Hotel-Search?destination=${encodeURIComponent(destination.name)}` },
-    { provider: "hotels", displayName: "Hotels.com", factor: 1.01, link: `https://www.hotels.com/Hotel-Search?destination=${encodeURIComponent(destination.name)}` },
-    { provider: "priceline", displayName: "Priceline", factor: 0.94, link: `https://www.priceline.com/relax/in/${encodeURIComponent(destination.name)}` }
+    { provider: "google-hotels", displayName: "Google Hotels", factor: 0.97, link: `https://www.google.com/travel/hotels?q=${encodeURIComponent(searchText)}` },
+    { provider: "booking", displayName: "Booking.com", factor: 1.03, link: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(destinationText)}` },
+    { provider: "expedia", displayName: "Expedia", factor: 1.07, link: `https://www.expedia.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}` },
+    { provider: "hotels", displayName: "Hotels.com", factor: 1.01, link: `https://www.hotels.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}` },
+    { provider: "tripadvisor", displayName: "Tripadvisor", factor: 0.94, link: `https://www.tripadvisor.com/Search?q=${encodeURIComponent(searchText)}` }
   ];
 
   return providers.map((item) => ({
@@ -543,7 +547,7 @@ export function carsFor(destination: DestinationOption): CarOption[] {
       dailyPrice: base,
       rating: 4.2,
       source: "Fallback transport index",
-      link: `https://www.kayak.com/cars/${encodeURIComponent(destination.name)}`,
+      link: `https://www.kayak.com/cars?query=${encodeURIComponent(destinationLabel(destination))}`,
       confidence: 0.64
     },
     {
@@ -553,13 +557,14 @@ export function carsFor(destination: DestinationOption): CarOption[] {
       dailyPrice: Math.round(base * 0.58),
       rating: 4.0,
       source: "Fallback transport index",
-      link: `https://www.google.com/search?q=${encodeURIComponent(`${destination.name} public transit visitor pass`)}`,
+      link: `https://www.google.com/search?q=${encodeURIComponent(`${destinationLabel(destination)} public transit visitor pass`)}`,
       confidence: 0.68
     }
   ];
 }
 
 export function restaurantsFor(destination: DestinationOption): RestaurantOption[] {
+  const searchText = destinationLabel(destination);
   return ["Market Table", "Neighborhood Grill", "Late Kitchen", "Local Bakery"].map((suffix, index) => ({
     id: `${destination.id}-restaurant-${index + 1}`,
     name: `${destination.name} ${suffix}`,
@@ -568,12 +573,13 @@ export function restaurantsFor(destination: DestinationOption): RestaurantOption
     averageMealPrice: Math.round(destination.averageDailyFood * (index === 2 ? 0.62 : 0.42)),
     rating: 4.2 + index * 0.1,
     source: "Fallback restaurant index",
-    link: `https://www.google.com/search?q=${encodeURIComponent(`${destination.name} best restaurants`)}`,
+    link: `https://www.google.com/search?q=${encodeURIComponent(`${searchText} best restaurants`)}`,
     confidence: 0.65
   }));
 }
 
 export function attractionsFor(destination: DestinationOption): AttractionOption[] {
+  const searchText = destinationLabel(destination);
   const categories: Interest[] = destination.bestFor.length ? destination.bestFor : ["food", "museums", "nature"];
   return categories.slice(0, 4).map((category, index) => ({
     id: `${destination.id}-attraction-${index + 1}`,
@@ -582,7 +588,29 @@ export function attractionsFor(destination: DestinationOption): AttractionOption
     estimatedPrice: Math.round(destination.averageDailyActivities * (0.45 + index * 0.18)),
     durationHours: index === 0 ? 3 : 2,
     source: "Fallback attraction index",
-    link: `https://www.google.com/search?q=${encodeURIComponent(`${destination.name} ${category} things to do`)}`,
+    link: `https://www.google.com/search?q=${encodeURIComponent(`${searchText} ${category} things to do`)}`,
     confidence: 0.66
   }));
+}
+
+function flightSearchText(destination: DestinationOption, request: TripRequest) {
+  return [`Flights from ${request.origin} to ${destinationLabel(destination)}`, travelMonthLabel(request)].filter(Boolean).join(" ");
+}
+
+function hotelSearchText(destination: DestinationOption, request?: TripRequest) {
+  return [`${destinationLabel(destination)} hotels`, request ? travelMonthLabel(request) : ""].filter(Boolean).join(" ");
+}
+
+function destinationLabel(destination: DestinationOption) {
+  return destination.country && destination.country !== "Global destination" ? `${destination.name}, ${destination.country}` : destination.name;
+}
+
+function travelMonthLabel(request: TripRequest) {
+  const value = request.startDate?.trim();
+  if (!value) return "";
+  const monthMatch = /^(\d{4})-(\d{2})$/.exec(value);
+  if (!monthMatch) return value;
+  const [, year, month] = monthMatch;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, 1));
+  return date.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
 }
