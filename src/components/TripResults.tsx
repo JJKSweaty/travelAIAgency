@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Bookmark, Calendar, Car, ChefHat, Coffee, ExternalLink, Hotel, MapPinned, Moon, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
+import { ArrowLeft, BedDouble, Bookmark, Calendar, Car, ChefHat, Coffee, ExternalLink, Hotel, MapPinned, Moon, Plane, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
 import { BudgetMeter } from "@/components/BudgetMeter";
 import { PriceComparisonChart } from "@/components/PriceComparisonChart";
 import { isTripSaved, readCurrentTrip, saveTrip, updateSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
@@ -90,10 +90,30 @@ export function TripResults() {
   }
 
   const currency = plan.request.currency;
+  const lowestHotel = [...plan.hotels].sort((a, b) => a.nightlyPrice - b.nightlyPrice)[0];
+  const lowestFlight = [...plan.priceComparison.flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0];
 
   function setSelectedStay(stay: TripStaySelection) {
     if (!plan) return;
-    persist({ ...plan, selectedStay: stay });
+    if (stay.type === "hotel") {
+      const hotel = plan.hotels.find((item) => item.name === stay.label);
+      persist({
+        ...plan,
+        selectedStay: stay,
+        selectedHotel: hotel
+          ? {
+              id: hotel.id,
+              name: hotel.name,
+              location: hotel.location,
+              nightlyPrice: hotel.nightlyPrice,
+              source: hotel.source,
+              link: hotel.link
+            }
+          : plan.selectedHotel
+      });
+      return;
+    }
+    persist({ ...plan, selectedStay: stay, selectedHotel: undefined });
   }
 
   function updateDraft(day: number, patch: Partial<{ title: string; category: ItineraryAdditionCategory; estimatedCost: string }>) {
@@ -162,9 +182,10 @@ export function TripResults() {
               <h1 className="mt-4 text-5xl font-semibold leading-tight">{plan.destination.name}</h1>
               <p className="mt-2 text-xl text-paper/78">{plan.destination.country}</p>
               <p className="mt-6 max-w-2xl text-base leading-7 text-paper/80">{plan.destination.summary}</p>
-              <a className="mt-6 inline-flex rounded-lg bg-white px-4 py-3 text-sm font-semibold text-ink" href={plan.destination.bookingLink} target="_blank" rel="noreferrer">
-                Search travel options
-              </a>
+              <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
+                <TravelActionCard href="/options/hotels" icon={<BedDouble size={18} />} title={lowestHotel ? `Hotels starting from ${formatMoney(lowestHotel.nightlyPrice, currency)}/night` : "Review hotel options"} meta={plan.selectedHotel?.name ?? plan.selectedStay?.label ?? "Select or keep the default stay"} />
+                <TravelActionCard href="/options/flights" icon={<Plane size={18} />} title={lowestFlight ? `Flights starting from ${formatMoney(lowestFlight.estimatedPrice, currency)} round-trip` : "Review flight options"} meta={plan.selectedFlightQuote?.displayName ?? "Select a provider search or keep the default estimate"} />
+              </div>
             </div>
             <BudgetMeter budget={plan.budget} currency={currency} />
           </div>
@@ -372,9 +393,10 @@ export function TripResults() {
         </div>
 
         <div className="grid content-start gap-6">
-          <RecommendationPanel title="Hotels" icon={<Hotel size={18} />} items={plan.hotels.map((hotel) => ({ name: hotel.name, meta: `${hotel.location} - ${formatMoney(hotel.nightlyPrice, currency)}/night`, link: hotel.link }))} />
-          <RecommendationPanel title="Transport" icon={<Car size={18} />} items={plan.cars.map((car) => ({ name: car.name, meta: `${car.pickupLocation} - ${formatMoney(car.dailyPrice, currency)}/day`, link: car.link }))} />
-          <RecommendationPanel title="Attractions" icon={<Ticket size={18} />} items={plan.attractions.slice(0, 3).map((attraction) => ({ name: attraction.name, meta: `${attraction.durationHours}h - about ${formatMoney(attraction.estimatedPrice, currency)}`, link: attraction.link }))} />
+          <TripSummaryPanel plan={plan} saved={saved} />
+          <RecommendationPanel title="Hotels" icon={<Hotel size={18} />} items={plan.hotels.map((hotel) => ({ name: hotel.name, meta: `${hotel.location} - ${formatMoney(hotel.nightlyPrice, currency)}/night`, link: hotel.link, source: "Planner estimate", confidence: hotel.confidence }))} />
+          <RecommendationPanel title="Transport" icon={<Car size={18} />} items={plan.cars.map((car) => ({ name: car.name, meta: `${car.pickupLocation} - ${formatMoney(car.dailyPrice, currency)}/day`, link: car.link, source: "Planner estimate", confidence: car.confidence }))} />
+          <RecommendationPanel title="Attractions" icon={<Ticket size={18} />} items={plan.attractions.slice(0, 3).map((attraction) => ({ name: attraction.name, meta: `${attraction.durationHours}h - about ${formatMoney(attraction.estimatedPrice, currency)}`, link: attraction.link, source: "Planner estimate", confidence: attraction.confidence }))} />
           <Panel title="Alternates" icon={<MapPinned size={18} />}>
             <div className="grid gap-3">
               {plan.alternates.map((destination) => (
@@ -413,6 +435,52 @@ function hotelToStay(plan: TripPlan): TripStaySelection {
   };
 }
 
+function TravelActionCard({ href, icon, title, meta }: { href: string; icon: React.ReactNode; title: string; meta: string }) {
+  return (
+    <Link className="focus-ring rounded-lg bg-white p-4 text-ink shadow-subtle transition hover:bg-paper" href={href}>
+      <span className="flex items-center gap-2 text-sm font-semibold text-reef">
+        {icon}
+        Explore options
+      </span>
+      <span className="mt-3 block text-lg font-semibold leading-snug">{title}</span>
+      <span className="mt-2 block text-sm text-ink/58">{meta}</span>
+    </Link>
+  );
+}
+
+function TripSummaryPanel({ plan, saved }: { plan: TripPlan; saved: boolean }) {
+  const currency = plan.request.currency;
+  const lowestFlight = [...plan.priceComparison.flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0];
+  return (
+    <Panel title="Trip summary" icon={<Sparkles size={18} />}>
+      <div className="grid gap-3 text-sm">
+        <SummaryRow label="Dates" value={dateSummary(plan)} />
+        <SummaryRow label="Travelers" value={`${plan.request.travelers} traveler${plan.request.travelers === 1 ? "" : "s"}`} />
+        <SummaryRow label="Budget" value={formatMoney(plan.request.totalBudget, currency)} />
+        <SummaryRow label="Selected hotel" value={plan.selectedHotel?.name ?? plan.selectedStay?.label ?? "Default starting estimate"} />
+        <SummaryRow label="Flight estimate" value={plan.selectedFlightQuote ? `${plan.selectedFlightQuote.displayName} ${formatMoney(plan.selectedFlightQuote.estimatedPrice, currency)}` : lowestFlight ? `${formatMoney(lowestFlight.estimatedPrice, currency)} starting` : "Default starting estimate"} />
+        <SummaryRow label="Save state" value={saved ? "Saved" : "Not saved yet"} />
+      </div>
+    </Panel>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-lg bg-white/70 px-3 py-2">
+      <span className="text-ink/52">{label}</span>
+      <span className="text-right font-semibold text-ink/78">{value}</span>
+    </div>
+  );
+}
+
+function dateSummary(plan: TripPlan) {
+  if (plan.request.dateMode === "exact" && plan.request.startDate) {
+    return [plan.request.startDate, plan.request.endDate].filter(Boolean).join(" to ");
+  }
+  return plan.request.startDate || `${plan.request.tripLengthDays} days`;
+}
+
 function ItinerarySegment({ icon, label, text }: { icon: React.ReactNode; label: string; text: string }) {
   return (
     <div className="grid gap-2 rounded-lg bg-ink/5 px-3 py-3 sm:grid-cols-[118px_1fr]">
@@ -437,7 +505,7 @@ function Panel({ title, icon, children }: { title: string; icon: React.ReactNode
   );
 }
 
-function RecommendationPanel({ title, icon, items }: { title: string; icon: React.ReactNode; items: { name: string; meta: string; link: string }[] }) {
+function RecommendationPanel({ title, icon, items }: { title: string; icon: React.ReactNode; items: { name: string; meta: string; link: string; source?: string; confidence?: number }[] }) {
   return (
     <Panel title={title} icon={icon}>
       <div className="grid gap-3">
@@ -445,6 +513,12 @@ function RecommendationPanel({ title, icon, items }: { title: string; icon: Reac
           <a key={item.name} className="rounded-lg bg-white/72 p-3 transition hover:bg-white" href={item.link} target="_blank" rel="noreferrer">
             <span className="block font-semibold">{item.name}</span>
             <span className="mt-1 block text-sm text-ink/60">{item.meta}</span>
+            {item.source ? (
+              <span className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
+                <span className="rounded bg-reef/10 px-2 py-1 text-reef">{item.source}</span>
+                {typeof item.confidence === "number" ? <span className="rounded bg-ink/6 px-2 py-1 text-ink/52">{Math.round(item.confidence * 100)}% confidence</span> : null}
+              </span>
+            ) : null}
           </a>
         ))}
       </div>

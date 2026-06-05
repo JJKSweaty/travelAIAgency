@@ -51,23 +51,27 @@ alter table public.trips enable row level security;
 
 create policy "Users can read own trips"
   on public.trips for select
-  using (auth.uid() = user_id);
+  to authenticated
+  using ((select auth.uid()) = user_id);
 
 create policy "Users can insert own trips"
   on public.trips for insert
-  with check (auth.uid() = user_id);
+  to authenticated
+  with check ((select auth.uid()) = user_id);
 
 create policy "Users can update own trips"
   on public.trips for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
 create policy "Users can delete own trips"
   on public.trips for delete
-  using (auth.uid() = user_id);
+  to authenticated
+  using ((select auth.uid()) = user_id);
 ```
 
-The header supports email/password login, creating an account, and magic-link login. If email confirmations are enabled in Supabase, newly created users must confirm their email before logging in. Unauthenticated users remain in guest mode and save trips locally. After signing in, the saved page can import guest trips into the Supabase account.
+The `/auth` page supports email/password login, creating an account, magic-link login, sign out, and guest-trip import. If email confirmations are enabled in Supabase, newly created users must confirm their email before logging in. Unauthenticated users remain in guest mode and save trips locally. After signing in, the auth and saved pages can import guest trips into the Supabase account.
 
 ## Currency
 

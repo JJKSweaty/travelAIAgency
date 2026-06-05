@@ -190,6 +190,27 @@ export type TripStaySelection = {
   location: string;
 };
 
+export type SelectedHotelOption = {
+  id: string;
+  name: string;
+  location: string;
+  nightlyPrice: number;
+  source: string;
+  link: string;
+};
+
+export type SelectedQuoteOption = {
+  id: string;
+  category: PriceQuote["category"];
+  provider: string;
+  displayName: string;
+  estimatedPrice: number;
+  unit: PriceQuote["unit"];
+  link: string;
+  source: PriceQuote["source"];
+  linkLabel?: string;
+};
+
 export type TripPlan = {
   id: string;
   createdAt: string;
@@ -204,6 +225,9 @@ export type TripPlan = {
   attractions: AttractionOption[];
   itinerary: ItineraryDay[];
   selectedStay?: TripStaySelection;
+  selectedHotel?: SelectedHotelOption;
+  selectedFlightQuote?: SelectedQuoteOption;
+  selectedHotelQuote?: SelectedQuoteOption;
   providerSummary: {
     hotels: ProviderResult<HotelOption>["source"];
     priceComparison: ProviderResult<PriceComparison>["source"];

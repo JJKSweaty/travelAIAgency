@@ -48,7 +48,11 @@ function QuoteGroup({ title, icon, quotes, currency }: { title: string; icon: Re
                 <div className={`h-2 rounded-full ${index === 0 ? "bg-reef" : "bg-gold"}`} style={{ width: `${width}%` }} />
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink/50">
-                <span>{quote.source === "live" ? "Live provider price" : "Planner estimate"}</span>
+                <span className="flex flex-wrap gap-2 font-medium">
+                  <span className="rounded bg-reef/10 px-2 py-1 text-reef">{quote.source === "live" ? "Live provider" : "Planner estimate"}</span>
+                  <span className="rounded bg-ink/6 px-2 py-1 text-ink/54">{quote.linkLabel?.startsWith("Exact") ? "Exact date search" : "Open provider search"}</span>
+                  <span className="rounded bg-ink/6 px-2 py-1 text-ink/54">{Math.round(quote.confidence * 100)}% confidence</span>
+                </span>
                 <span className="inline-flex items-center gap-1 font-medium text-reef">
                   {quote.linkLabel ?? "Open provider search"}
                   <ExternalLink size={12} aria-hidden />

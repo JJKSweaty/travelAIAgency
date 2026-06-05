@@ -61,6 +61,16 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
         location: `${destination.name} center`
       };
   const displayHotels = recommendedHotels.map((hotel) => convertUsdFields(hotel, currency, ["nightlyPrice"]));
+  const selectedHotel = displayHotels[0]
+    ? {
+        id: displayHotels[0].id,
+        name: displayHotels[0].name,
+        location: displayHotels[0].location,
+        nightlyPrice: displayHotels[0].nightlyPrice,
+        source: displayHotels[0].source,
+        link: displayHotels[0].link
+      }
+    : undefined;
   const displayCars = cars.data.sort((a, b) => a.dailyPrice - b.dailyPrice).map((car) => convertUsdFields(car, currency, ["dailyPrice"]));
   const displayRestaurants = restaurants.data.map((restaurant) => convertUsdFields(restaurant, currency, ["averageMealPrice"]));
   const displayAttractions = attractions.data.map((attraction) => convertUsdFields(attraction, currency, ["estimatedPrice"]));
@@ -91,6 +101,7 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
     attractions: displayAttractions,
     itinerary: displayItinerary,
     selectedStay,
+    selectedHotel,
     providerSummary: {
       hotels: hotels.source,
       priceComparison: priceComparison.source,
