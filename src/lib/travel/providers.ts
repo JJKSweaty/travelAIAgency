@@ -231,7 +231,7 @@ function buildThemes(destinationName: string, interests: Interest[]): string[] {
     adventure: ["active trail and local challenge", "outdoor adrenaline window", "high-energy movement day"]
   };
 
-  const selected = interests.length ? interests : ["food", "nature"];
+  const selected: Interest[] = interests.length ? interests : ["food", "nature"];
   const merged = selected.flatMap((interest) => byInterest[interest]);
   const base = [`${destinationName.toLowerCase()} old-town rhythm`, `${destinationName.toLowerCase()} local neighborhoods`];
   return [...merged, ...base].filter(Boolean);
@@ -305,4 +305,3 @@ function customDestination(request: TripRequest): DestinationOption {
     bookingLink: `https://www.google.com/travel/explore?q=${encodeURIComponent(parsed.label)}`
   };
 }
-

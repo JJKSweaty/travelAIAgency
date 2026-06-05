@@ -9,10 +9,12 @@ export const tripRequestSchema = z.object({
   endDate: z.string().optional(),
   tripLengthDays: z.coerce.number().int().min(1).max(21),
   totalBudget: z.coerce.number().min(250).max(100000),
+  currency: z.enum(["USD", "CAD", "EUR", "GBP", "AUD", "JPY", "MXN"]).optional(),
   travelers: z.coerce.number().int().min(1).max(12),
   travelStyle: z.enum(["relaxed", "balanced", "packed"]),
   interests: z.array(z.enum(["food", "nightlife", "nature", "museums", "beaches", "family", "luxury", "budget", "adventure"])).min(1),
   transportPreference: z.enum(["rental-car", "public-transit", "flexible"]),
+  cityTravelPreference: z.enum(["walkable", "public-transit", "rideshare", "rental-car", "mixed"]).optional(),
   excludedDestinationIds: z.array(z.string()).optional(),
   excludedHotelIds: z.array(z.string()).optional(),
   itineraryVariant: z.coerce.number().int().min(0).optional()

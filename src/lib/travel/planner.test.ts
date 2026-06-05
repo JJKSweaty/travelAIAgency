@@ -24,6 +24,14 @@ describe("planTrip", () => {
     expect(plan.itinerary).toHaveLength(4);
   });
 
+  it("preserves selected currency and returns converted display estimates", async () => {
+    const plan = await planTrip({ ...request, totalBudget: 2400, currency: "CAD", cityTravelPreference: "public-transit" });
+    expect(plan.request.currency).toBe("CAD");
+    expect(plan.budget.lodging).toBeGreaterThan(800);
+    expect(plan.itinerary[0].transit).toHaveLength(3);
+    expect(plan.itinerary[0].transit?.[0].summary).toMatch(/Morning:/);
+  });
+
   it("surfaces exact Google travel searches first when exact dates are provided", async () => {
     const plan = await planTrip({ ...request, dateMode: "exact", startDate: "2026-07-10", endDate: "2026-07-14", tripLengthDays: 5 });
     expect(plan.priceComparison.flights[0]).toMatchObject({ provider: "google-flights", linkLabel: "Exact flight search" });

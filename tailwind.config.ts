@@ -13,7 +13,8 @@ const config: Config = {
         gold: "#d99b32"
       },
       boxShadow: {
-        soft: "0 18px 60px rgba(18, 21, 31, 0.12)"
+        soft: "0 18px 60px rgba(18, 21, 31, 0.12)",
+        subtle: "0 10px 30px rgba(18, 21, 31, 0.08)"
       }
     }
   },

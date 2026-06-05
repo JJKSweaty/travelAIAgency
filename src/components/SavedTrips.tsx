@@ -2,29 +2,64 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Trash2 } from "lucide-react";
-import { readSavedTrips, removeSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
+import { CloudUpload, Trash2 } from "lucide-react";
+import { formatMoney } from "@/lib/travel/currency";
+import { getSaveMode, importGuestTrips, listSavedTrips, readSavedTrips, removeSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
 import type { TripPlan } from "@/lib/travel/types";
 
 export function SavedTrips() {
   const [trips, setTrips] = useState<TripPlan[]>([]);
+  const [mode, setMode] = useState<"guest" | "account">("guest");
+  const [guestCount, setGuestCount] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const task = window.setTimeout(() => setTrips(readSavedTrips()), 0);
+    const task = window.setTimeout(() => void refresh(), 0);
     return () => window.clearTimeout(task);
   }, []);
 
-  function remove(id: string) {
-    removeSavedTrip(id);
-    setTrips(readSavedTrips());
+  async function refresh() {
+    try {
+      setError(null);
+      const nextMode = await getSaveMode();
+      setMode(nextMode);
+      setGuestCount(readSavedTrips().length);
+      setTrips(await listSavedTrips());
+    } catch {
+      setError("Saved trips could not be loaded. Guest trips are still available on this device.");
+      setTrips(readSavedTrips());
+    }
+  }
+
+  async function remove(id: string) {
+    await removeSavedTrip(id);
+    await refresh();
+  }
+
+  async function importLocalTrips() {
+    try {
+      await importGuestTrips();
+      await refresh();
+    } catch {
+      setError("Guest trips could not be imported. Check your Supabase trips table and RLS policies.");
+    }
   }
 
   return (
     <main className="mx-auto max-w-6xl px-4 pb-12 sm:px-6 lg:px-8">
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Saved plans</p>
-        <h1 className="mt-3 text-4xl font-semibold">Your local trip library</h1>
+        <h1 className="mt-3 text-4xl font-semibold">{mode === "account" ? "Your Roamly library" : "Guest trip library"}</h1>
+        </div>
+        {mode === "account" && guestCount > 0 ? (
+          <button className="inline-flex items-center gap-2 rounded-lg bg-reef px-4 py-2 text-sm font-semibold text-white" onClick={importLocalTrips}>
+            <CloudUpload size={16} aria-hidden />
+            Import guest trips
+          </button>
+        ) : null}
       </div>
+      {error ? <p className="mb-4 rounded-lg bg-coral/10 px-4 py-3 text-sm font-medium text-coral">{error}</p> : null}
       {trips.length === 0 ? (
         <div className="glass-panel rounded-lg p-8">
           <p className="text-ink/70">No saved trips yet.</p>
@@ -42,7 +77,7 @@ export function SavedTrips() {
                   <div>
                     <h2 className="text-xl font-semibold">{trip.destination.name}</h2>
                     <p className="mt-1 text-sm text-ink/60">
-                      {trip.request.tripLengthDays} days - ${trip.request.totalBudget.toLocaleString()} budget
+                      {trip.request.tripLengthDays} days - {formatMoney(trip.request.totalBudget, trip.request.currency)} budget
                     </p>
                   </div>
                   <button className="rounded-lg bg-white/70 p-2 text-coral" aria-label={`Delete ${trip.destination.name}`} onClick={() => remove(trip.id)}>

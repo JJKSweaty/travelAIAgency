@@ -1,18 +1,17 @@
-# aiTravelAgency
+# Roamly
 
-A budget-first AI travel planning web app built with Next.js, TypeScript, and Tailwind CSS.
+A budget-smart AI travel planning web app built with Next.js, TypeScript, Tailwind CSS, and Supabase-ready saved trips.
 
-The app guides a traveler through origin, destination mode, flexible month or exact dates, trip length, budget, traveler count, style, interests, and transport preferences. It then generates a trip plan with:
+Roamly guides a traveler through origin, destination mode, flexible month or exact dates, trip length, budget, currency, traveler count, style, interests, transport, and in-city travel preferences. It generates:
 
-- destination recommendation, trending fallback, and global origin/destination autocomplete
-- repeated destination discovery using the same budget and trip settings
-- budget feasibility and category split
-- hotel, transport, restaurant, and attraction recommendations
-- flight and hotel price comparison graphics with source links
-- day-by-day itinerary
-- outbound search/booking links
-- local saved trips
-- refinement actions such as cheaper, luxury, relaxed, adventure, and food-focused
+- destination recommendations with global origin/destination autocomplete
+- budget feasibility and category split in the selected currency
+- hotel, transport, restaurant, attraction, flight, and hotel-search estimates
+- day-by-day itinerary with generated city route suggestions
+- outbound search/booking links for live verification
+- guest saved trips in browser storage
+- account saved trips through Supabase when configured
+- refinements such as cheaper, luxury, relaxed, adventure, food-focused, another destination, replacement hotel, and regenerate
 
 ## Commands
 
@@ -25,13 +24,62 @@ npm run build
 
 Open `http://localhost:3000` after starting the dev server.
 
+## Supabase Setup
+
+Roamly works in guest mode without Supabase. To enable login and account-saved trips, create a Supabase project, enable email auth in Auth, and add these environment variables:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=your-project-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+Run this SQL in Supabase:
+
+```sql
+create table public.trips (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  plan_id text not null,
+  plan jsonb not null,
+  destination_name text generated always as (plan->'destination'->>'name') stored,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, plan_id)
+);
+
+alter table public.trips enable row level security;
+
+create policy "Users can read own trips"
+  on public.trips for select
+  using (auth.uid() = user_id);
+
+create policy "Users can insert own trips"
+  on public.trips for insert
+  with check (auth.uid() = user_id);
+
+create policy "Users can update own trips"
+  on public.trips for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy "Users can delete own trips"
+  on public.trips for delete
+  using (auth.uid() = user_id);
+```
+
+The header supports email/password login, creating an account, and magic-link login. If email confirmations are enabled in Supabase, newly created users must confirm their email before logging in. Unauthenticated users remain in guest mode and save trips locally. After signing in, the saved page can import guest trips into the Supabase account.
+
+## Currency
+
+Supported display currencies are USD, CAD, EUR, GBP, AUD, JPY, and MXN. Fallback/provider estimates are treated as USD internally, then converted with deterministic static rates for planning display. These are planning estimates only, not live exchange rates.
+
 ## Data Providers
 
 V1 uses provider interfaces with curated fallback data so the app works without paid API keys. Live provider adapters can be added behind the existing interfaces in `src/lib/travel/providers.ts`.
 
-Origin and preferred destination search accept free text, so travelers can plan any origin-to-destination route. Autocomplete is backed by Open-Meteo geocoding when available, then falls back to curated travel seeds and a typed custom location. Automatic destination mode ranks destinations by budget fit first, then trend and interest fit. Curated destination matches receive richer fallback data; unmatched destinations use generic fallback estimates and verification links. Results can be refined with "Try another destination" to keep cycling through budget-fit recommendations.
+Origin and preferred destination search accept free text. Autocomplete is backed by Open-Meteo geocoding when available, then curated travel seeds and a typed custom location. Automatic destination mode ranks destinations by budget fit first, then trend and interest fit.
 
-The app does not scrape booking websites directly. It normalizes provider/API or fallback quote data and links users to major travel search surfaces to verify live prices. Exact-date mode builds specific Google Flights, Google Hotels, and Booking.com hotel searches. Without `TRAVEL_PRICE_API_KEY`/provider adapters and normalized airport/location IDs, non-Google provider cards open broad provider searches and flight/hotel prices shown in the app are planner estimates, not live provider prices.
+The app does not scrape booking websites directly. It normalizes provider/API or fallback quote data and links users to major travel search surfaces to verify live prices. Exact-date mode builds specific Google Flights, Google Hotels, and Booking.com hotel searches.
 
 Optional environment keys checked by `/api/health`:
 
@@ -42,8 +90,6 @@ Optional environment keys checked by `/api/health`:
 - `RESTAURANTS_API_KEY`
 - `ATTRACTIONS_API_KEY`
 
-Global location autocomplete is available at `GET /api/location-suggestions?q=lis&mode=destination`. The older curated destination endpoint remains available at `GET /api/destination-suggestions?q=lis`.
-
 Optional location search settings:
 
 - `OPEN_METEO_GEOCODING_BASE_URL`, default `https://geocoding-api.open-meteo.com/v1/search`
@@ -52,21 +98,17 @@ Optional location search settings:
 
 Optional AI itinerary enrichment uses OpenRouter when `OPENROUTER_API_KEY` is set:
 
-- `OPENROUTER_API_KEY`, your OpenRouter API key
+- `OPENROUTER_API_KEY`
 - `OPENROUTER_MODEL`, default `nvidia/nemotron-3.5-content-safety:free`
 - `OPENROUTER_BASE_URL`, default `https://openrouter.ai/api/v1/chat/completions`
 - `OPENROUTER_TIMEOUT_MS`, default `12000`
 - `OPENROUTER_TEMPERATURE`, default `0.8`
 - `OPENROUTER_TOP_P`, default `0.9`
 - `OPENROUTER_MAX_TOKENS`, default `1100`
-- `OPENROUTER_HTTP_REFERER` (optional leaderboard attribution)
-- `OPENROUTER_X_TITLE` (optional leaderboard attribution)
+- `OPENROUTER_HTTP_REFERER` optional attribution
+- `OPENROUTER_X_TITLE` optional attribution
 
 If OpenRouter is unavailable, invalid, or not configured, the deterministic fallback itinerary generator is used.
-
-## AI Usage
-
-AI itinerary drafting runs through OpenRouter. When `OPENROUTER_API_KEY` is configured, the planner sends the selected destination, exact/flexible dates, trip settings, restaurants, and attractions to the configured OpenRouter model (default: `nvidia/nemotron-3.5-content-safety:free`) and expects strict JSON itinerary output. Budget allocation, destination ranking, provider links, and fallback estimates are deterministic TypeScript logic.
 
 ## Project Skill
 

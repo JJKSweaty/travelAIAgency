@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Sparkles, Users } from "lucide-react";
+import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Route, Sparkles, Users } from "lucide-react";
 import { writeCurrentTrip } from "@/lib/travel/storage";
-import type { Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
+import { currencyOptions, formatMoney } from "@/lib/travel/currency";
+import type { CityTravelPreference, CurrencyCode, Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
 
 const interestOptions: { id: Interest; label: string }[] = [
   { id: "food", label: "Food" },
@@ -27,10 +28,12 @@ const initialRequest: TripRequest = {
   endDate: "",
   tripLengthDays: 5,
   totalBudget: 2400,
+  currency: "CAD",
   travelers: 2,
   travelStyle: "balanced",
   interests: ["food", "nature"],
-  transportPreference: "flexible"
+  transportPreference: "flexible",
+  cityTravelPreference: "mixed"
 };
 
 export function TripPlannerWizard() {
@@ -38,38 +41,14 @@ export function TripPlannerWizard() {
   const [request, setRequest] = useState<TripRequest>(initialRequest);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [aiHealth, setAiHealth] = useState<{ status: "checking" | "openrouter-ready" | "fallback"; model: string | null }>({
-    status: "checking",
-    model: null
-  });
   const [originSuggestions, setOriginSuggestions] = useState<LocationOption[]>([]);
   const [destinationSuggestions, setDestinationSuggestions] = useState<LocationOption[]>([]);
   const [showOriginSuggestions, setShowOriginSuggestions] = useState(false);
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
 
+  const currency = request.currency ?? "USD";
   const perPersonDay = useMemo(() => Math.round(request.totalBudget / Math.max(1, request.travelers * request.tripLengthDays)), [request]);
   const budgetTone = perPersonDay < 90 ? "Tight" : perPersonDay < 180 ? "Workable" : "Comfortable";
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadAiHealth() {
-      try {
-        const response = await fetch("/api/health", { signal: controller.signal });
-        if (!response.ok) throw new Error("Health check failed");
-        const payload = (await response.json()) as {
-          configuredProviders?: { ai?: string; aiModel?: string | null };
-        };
-        const status = payload.configuredProviders?.ai === "openrouter-ready" ? "openrouter-ready" : "fallback";
-        setAiHealth({ status, model: payload.configuredProviders?.aiModel ?? null });
-      } catch {
-        setAiHealth({ status: "fallback", model: null });
-      }
-    }
-
-    loadAiHealth();
-    return () => controller.abort();
-  }, []);
 
   useLocationSuggestions(request.origin, true, "origin", setOriginSuggestions);
   useLocationSuggestions(request.destination ?? "", request.preferredDestinationEnabled, "destination", setDestinationSuggestions);
@@ -117,16 +96,16 @@ export function TripPlannerWizard() {
           />
           <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/70 to-transparent" />
           <div className="relative max-w-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Trip planner</p>
-            <h1 className="mt-4 text-4xl font-semibold leading-tight sm:text-6xl">Build the trip around the money.</h1>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Roamly planner</p>
+            <h1 className="mt-4 text-4xl font-semibold leading-tight sm:text-6xl">Shape a trip around your budget.</h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-paper/78">
-              Choose a destination or let the agent find a hot spot, then balance hotels, transport, food, activities, and a daily plan.
+              Choose a destination or let Roamly find a strong fit, then balance stays, transport, food, activities, and daily routes.
             </p>
           </div>
         </div>
 
         <div className="grid gap-6 p-5 sm:p-8">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_220px]">
             <Field label="Origin" icon={<Plane size={17} />}>
               <div className="relative">
                 <input
@@ -167,6 +146,15 @@ export function TripPlannerWizard() {
                 {request.preferredDestinationEnabled ? "Use my destination" : "Find trending/hot"}
                 <Sparkles size={16} className="text-coral" aria-hidden />
               </button>
+            </Field>
+            <Field label="Currency" icon={<DollarSign size={17} />}>
+              <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={currency} onChange={(event) => setRequest({ ...request, currency: event.target.value as CurrencyCode })}>
+                {currencyOptions.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
 
@@ -257,6 +245,15 @@ export function TripPlannerWizard() {
                 <option value="public-transit">Transit/rideshare</option>
               </select>
             </Field>
+            <Field label="In-city travel" icon={<Route size={17} />}>
+              <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.cityTravelPreference ?? "mixed"} onChange={(event) => setRequest({ ...request, cityTravelPreference: event.target.value as CityTravelPreference })}>
+                <option value="mixed">Mixed</option>
+                <option value="walkable">Walkable</option>
+                <option value="public-transit">Public transit</option>
+                <option value="rideshare">Rideshare</option>
+                <option value="rental-car">Rental car</option>
+              </select>
+            </Field>
           </div>
 
           <div>
@@ -290,23 +287,15 @@ export function TripPlannerWizard() {
       <aside className="grid content-start gap-4">
         <div className="glass-panel rounded-lg p-5">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Live budget read</p>
-          <p className="mt-3 text-4xl font-semibold">${perPersonDay}</p>
+          <p className="mt-3 text-4xl font-semibold">{formatMoney(perPersonDay, currency)}</p>
           <p className="mt-1 text-sm text-ink/60">per traveler per day</p>
           <div className="mt-4 h-3 rounded-full bg-ink/10">
             <div className="h-3 rounded-full bg-coral" style={{ width: `${Math.min(100, Math.max(18, perPersonDay / 3))}%` }} />
           </div>
           <p className="mt-4 text-sm font-medium">{budgetTone} starting point</p>
-          <p className="mt-4 text-sm font-semibold text-ink">AI status</p>
-          <p className="mt-1 text-sm text-ink/60">
-            {aiHealth.status === "checking"
-              ? "Checking OpenRouter configuration..."
-              : aiHealth.status === "openrouter-ready"
-                ? `Using OpenRouter${aiHealth.model ? ` (${aiHealth.model})` : ""}`
-                : "Using fallback itinerary generator"}
-          </p>
         </div>
         <div className="rounded-lg bg-white/70 p-5 shadow-soft">
-          <p className="text-sm font-semibold text-ink">What the agent returns</p>
+          <p className="text-sm font-semibold text-ink">What Roamly returns</p>
           <div className="mt-4 grid gap-3 text-sm text-ink/70">
             <span>Hotel short list with booking links</span>
             <span>Car or transit estimate</span>

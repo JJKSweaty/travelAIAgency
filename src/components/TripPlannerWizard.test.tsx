@@ -43,10 +43,12 @@ describe("TripPlannerWizard", () => {
 
   it("renders the guided planning controls", () => {
     render(<TripPlannerWizard />);
-    expect(screen.getByRole("heading", { name: /build the trip around the money/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /shape a trip around your budget/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/origin/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/travel month/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/total budget/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/currency/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/in-city travel/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate trip plan/i })).toBeInTheDocument();
   });
 

@@ -1,5 +1,7 @@
 export type TravelStyle = "relaxed" | "balanced" | "packed";
 export type TransportPreference = "rental-car" | "public-transit" | "flexible";
+export type CityTravelPreference = "walkable" | "public-transit" | "rideshare" | "rental-car" | "mixed";
+export type CurrencyCode = "USD" | "CAD" | "EUR" | "GBP" | "AUD" | "JPY" | "MXN";
 export type LocationSuggestionMode = "origin" | "destination";
 export type TravelDateMode = "month" | "exact";
 export type Interest =
@@ -22,10 +24,12 @@ export type TripRequest = {
   endDate?: string;
   tripLengthDays: number;
   totalBudget: number;
+  currency?: CurrencyCode;
   travelers: number;
   travelStyle: TravelStyle;
   interests: Interest[];
   transportPreference: TransportPreference;
+  cityTravelPreference?: CityTravelPreference;
   excludedDestinationIds?: string[];
   excludedHotelIds?: string[];
   itineraryVariant?: number;
@@ -155,13 +159,14 @@ export type ItineraryDay = {
   afternoon: string;
   evening: string;
   estimatedCost: number;
+  transit?: TransitPlan[];
   additions?: ItineraryAddition[];
 };
 
 export type ItineraryAdditionCategory = "food" | "activity" | "shopping" | "show" | "relaxation" | "custom";
 
 export type TransitPlan = {
-  mode: "walk" | "public-transit" | "rideshare" | "drive";
+  mode: "walk" | "public-transit" | "metro" | "bike" | "rideshare" | "drive";
   durationMinutes: number;
   summary: string;
   from: string;

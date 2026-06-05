@@ -1,7 +1,8 @@
 import { budgetFitScore } from "@/lib/travel/budget";
-import type { BudgetBreakdown } from "@/lib/travel/types";
+import { formatMoney } from "@/lib/travel/currency";
+import type { BudgetBreakdown, CurrencyCode } from "@/lib/travel/types";
 
-export function BudgetMeter({ budget }: { budget: BudgetBreakdown }) {
+export function BudgetMeter({ budget, currency }: { budget: BudgetBreakdown; currency?: CurrencyCode }) {
   const score = budgetFitScore(budget);
   return (
     <div className="rounded-lg bg-ink p-5 text-paper">
@@ -16,8 +17,8 @@ export function BudgetMeter({ budget }: { budget: BudgetBreakdown }) {
         <div className="h-3 rounded-full bg-coral transition-all" style={{ width: `${score}%` }} />
       </div>
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-paper/75">
-        <span>Estimate ${budget.totalEstimated.toLocaleString()}</span>
-        <span className="text-right">Remaining ${budget.remaining.toLocaleString()}</span>
+        <span>Estimate {formatMoney(budget.totalEstimated, currency)}</span>
+        <span className="text-right">Remaining {formatMoney(budget.remaining, currency)}</span>
       </div>
     </div>
   );

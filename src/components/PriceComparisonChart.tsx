@@ -1,7 +1,8 @@
 import { BedDouble, ExternalLink, Plane } from "lucide-react";
-import type { PriceComparison, PriceQuote } from "@/lib/travel/types";
+import { formatMoney } from "@/lib/travel/currency";
+import type { CurrencyCode, PriceComparison, PriceQuote } from "@/lib/travel/types";
 
-export function PriceComparisonChart({ comparison }: { comparison: PriceComparison }) {
+export function PriceComparisonChart({ comparison, currency }: { comparison: PriceComparison; currency?: CurrencyCode }) {
   return (
     <section className="glass-panel rounded-lg p-5">
       <div className="mb-5 flex items-start justify-between gap-4">
@@ -11,19 +12,19 @@ export function PriceComparisonChart({ comparison }: { comparison: PriceComparis
         </div>
         <div className="hidden rounded-lg bg-reef/10 px-3 py-2 text-sm font-semibold text-reef sm:block">
           {comparison.lowestFlight && comparison.lowestHotel
-            ? `$${(comparison.lowestFlight.estimatedPrice + comparison.lowestHotel.estimatedPrice).toLocaleString()} low pair`
+            ? `${formatMoney(comparison.lowestFlight.estimatedPrice + comparison.lowestHotel.estimatedPrice, currency)} low pair`
             : "Estimate mode"}
         </div>
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
-        <QuoteGroup title="Flights" icon={<Plane size={18} />} quotes={comparison.flights} />
-        <QuoteGroup title="Hotels" icon={<BedDouble size={18} />} quotes={comparison.hotels} />
+        <QuoteGroup title="Flights" icon={<Plane size={18} />} quotes={comparison.flights} currency={currency} />
+        <QuoteGroup title="Hotels" icon={<BedDouble size={18} />} quotes={comparison.hotels} currency={currency} />
       </div>
     </section>
   );
 }
 
-function QuoteGroup({ title, icon, quotes }: { title: string; icon: React.ReactNode; quotes: PriceQuote[] }) {
+function QuoteGroup({ title, icon, quotes, currency }: { title: string; icon: React.ReactNode; quotes: PriceQuote[]; currency?: CurrencyCode }) {
   const max = Math.max(...quotes.map((quote) => quote.estimatedPrice), 1);
 
   return (
@@ -40,7 +41,7 @@ function QuoteGroup({ title, icon, quotes }: { title: string; icon: React.ReactN
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-semibold">{quote.displayName}</span>
                 <span className="font-semibold">
-                  ${quote.estimatedPrice.toLocaleString()} <span className="text-xs font-medium text-ink/48">/{quote.unit}</span>
+                  {formatMoney(quote.estimatedPrice, currency)} <span className="text-xs font-medium text-ink/48">/{quote.unit}</span>
                 </span>
               </div>
               <div className="mt-2 h-2 rounded-full bg-ink/10">

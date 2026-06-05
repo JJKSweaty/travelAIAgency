@@ -17,10 +17,12 @@ const plan: TripPlan = {
     destination: "Lisbon",
     tripLengthDays: 3,
     totalBudget: 2000,
+    currency: "CAD",
     travelers: 2,
     travelStyle: "balanced",
     interests: ["food"],
-    transportPreference: "flexible"
+    transportPreference: "flexible",
+    cityTravelPreference: "mixed"
   },
   destination: {
     id: "lisbon",
@@ -85,7 +87,26 @@ const plan: TripPlan = {
   cars: [{ id: "c", name: "Transit allowance", pickupLocation: "City", dailyPrice: 25, rating: 4, source: "test", link: "https://example.com", confidence: 0.7 }],
   restaurants: [{ id: "r", name: "Market Table", cuisine: "local", neighborhood: "Old town", averageMealPrice: 25, rating: 4.5, source: "test", link: "https://example.com", confidence: 0.7 }],
   attractions: [{ id: "a", name: "Tasting route", category: "food", estimatedPrice: 30, durationHours: 3, source: "test", link: "https://example.com", confidence: 0.7 }],
-  itinerary: [{ day: 1, title: "Arrival", morning: "Arrive", afternoon: "Explore", evening: "Dinner", estimatedCost: 90 }],
+  itinerary: [
+    {
+      day: 1,
+      title: "Arrival",
+      morning: "Arrive",
+      afternoon: "Explore",
+      evening: "Dinner",
+      estimatedCost: 90,
+      transit: [
+        {
+          mode: "metro",
+          durationMinutes: 20,
+          summary: "Morning: Metro about 20 min",
+          from: "Central House",
+          to: "Arrive",
+          mapLink: "https://example.com/maps"
+        }
+      ]
+    }
+  ],
   providerSummary: { hotels: "fallback", priceComparison: "fallback", cars: "fallback", restaurants: "fallback", attractions: "fallback", itinerary: "fallback" },
   notes: ["Prices are estimates."]
 };
@@ -104,9 +125,10 @@ describe("TripResults", () => {
     expect(screen.getByRole("heading", { name: /price comparison/i })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: /hotels/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: /restaurants & food/i })).toBeInTheDocument();
-    expect(screen.getByText(/morning/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/morning/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/afternoon/i)).toBeInTheDocument();
-    expect(screen.getByText(/about \$25\/meal/i)).toBeInTheDocument();
+    expect(screen.getByText(/about CA\$25\/meal/i)).toBeInTheDocument();
+    expect(screen.getByText(/getting around/i)).toBeInTheDocument();
     expect(screen.getAllByText(/open provider search/i).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /try another destination/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save trip/i })).toBeInTheDocument();

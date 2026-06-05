@@ -1,5 +1,7 @@
 import { allocateBudget } from "./budget";
 import { isOpenRouterConfigured, OpenRouterItineraryGenerator } from "./ai";
+import { convertUsdFields, fromUsd, normalizeCurrency, toUsd } from "./currency";
+import { buildDayTransitPlans } from "./transit";
 import {
   type AttractionProvider,
   type CarSearchProvider,
@@ -24,23 +26,26 @@ const travelPriceProvider: TravelPriceProvider = new FallbackTravelPriceProvider
 const itineraryGenerator = new OpenRouterItineraryGenerator();
 
 export async function planTrip(request: TripRequest): Promise<TripPlan> {
-  const destinations = await destinationProvider.findDestinations(request);
+  const currency = normalizeCurrency(request.currency);
+  const displayRequest: TripRequest = { ...request, currency };
+  const planningRequest: TripRequest = { ...displayRequest, totalBudget: toUsd(displayRequest.totalBudget, currency) };
+  const destinations = await destinationProvider.findDestinations(planningRequest);
   const destination = destinations.data[0];
   const alternates = destinations.data.slice(1, 3);
   const [hotels, cars, restaurants, attractions, priceComparison] = await Promise.all([
-    hotelProvider.searchHotels(destination, request),
-    carProvider.searchCars(destination, request),
-    restaurantProvider.searchRestaurants(destination, request),
-    attractionProvider.searchAttractions(destination, request),
-    travelPriceProvider.comparePrices(destination, request)
+    hotelProvider.searchHotels(destination, planningRequest),
+    carProvider.searchCars(destination, planningRequest),
+    restaurantProvider.searchRestaurants(destination, planningRequest),
+    attractionProvider.searchAttractions(destination, planningRequest),
+    travelPriceProvider.comparePrices(destination, planningRequest)
   ]);
   const itinerary = await itineraryGenerator.generateItinerary({
     destination,
-    request,
+    request: planningRequest,
     restaurants: restaurants.data,
     attractions: attractions.data
   });
-  const budget = allocateBudget(request, destination);
+  const budget = convertBudget(allocateBudget(planningRequest, destination), currency);
   const sortedHotels = hotels.data.sort((a, b) => a.nightlyPrice - b.nightlyPrice);
   const availableHotels = sortedHotels.filter((hotel) => !(request.excludedHotelIds ?? []).includes(hotel.id));
   const recommendedHotels = availableHotels.length ? availableHotels : sortedHotels;
@@ -55,20 +60,36 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
         label: "Airbnb / private stay",
         location: `${destination.name} center`
       };
+  const displayHotels = recommendedHotels.map((hotel) => convertUsdFields(hotel, currency, ["nightlyPrice"]));
+  const displayCars = cars.data.sort((a, b) => a.dailyPrice - b.dailyPrice).map((car) => convertUsdFields(car, currency, ["dailyPrice"]));
+  const displayRestaurants = restaurants.data.map((restaurant) => convertUsdFields(restaurant, currency, ["averageMealPrice"]));
+  const displayAttractions = attractions.data.map((attraction) => convertUsdFields(attraction, currency, ["estimatedPrice"]));
+  const displayItinerary = itinerary.data.map((day) => {
+    const converted = { ...day, estimatedCost: fromUsd(day.estimatedCost, currency) };
+    return {
+      ...converted,
+      transit: buildDayTransitPlans({
+        day: converted,
+        fromStay: selectedStay,
+        transportPreference: displayRequest.transportPreference,
+        cityTravelPreference: displayRequest.cityTravelPreference
+      })
+    };
+  });
 
   return {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
-    request,
+    request: displayRequest,
     destination,
     alternates,
     budget,
-    hotels: recommendedHotels,
-    priceComparison: priceComparison.data[0],
-    cars: cars.data.sort((a, b) => a.dailyPrice - b.dailyPrice),
-    restaurants: restaurants.data,
-    attractions: attractions.data,
-    itinerary: itinerary.data,
+    hotels: displayHotels,
+    priceComparison: convertPriceComparison(priceComparison.data[0], currency),
+    cars: displayCars,
+    restaurants: displayRestaurants,
+    attractions: displayAttractions,
+    itinerary: displayItinerary,
     selectedStay,
     providerSummary: {
       hotels: hotels.source,
@@ -85,6 +106,31 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
       ...(destinations.warnings ?? []),
       ...budget.warnings
     ]
+  };
+}
+
+function convertBudget(budget: ReturnType<typeof allocateBudget>, currency: ReturnType<typeof normalizeCurrency>) {
+  return {
+    ...budget,
+    lodging: fromUsd(budget.lodging, currency),
+    transport: fromUsd(budget.transport, currency),
+    food: fromUsd(budget.food, currency),
+    activities: fromUsd(budget.activities, currency),
+    buffer: fromUsd(budget.buffer, currency),
+    totalEstimated: fromUsd(budget.totalEstimated, currency),
+    remaining: fromUsd(budget.remaining, currency)
+  };
+}
+
+function convertPriceComparison(priceComparison: TripPlan["priceComparison"], currency: ReturnType<typeof normalizeCurrency>) {
+  const flights = priceComparison.flights.map((quote) => ({ ...quote, estimatedPrice: fromUsd(quote.estimatedPrice, currency) }));
+  const hotels = priceComparison.hotels.map((quote) => ({ ...quote, estimatedPrice: fromUsd(quote.estimatedPrice, currency) }));
+  return {
+    ...priceComparison,
+    flights,
+    hotels,
+    lowestFlight: priceComparison.lowestFlight ? { ...priceComparison.lowestFlight, estimatedPrice: fromUsd(priceComparison.lowestFlight.estimatedPrice, currency) } : undefined,
+    lowestHotel: priceComparison.lowestHotel ? { ...priceComparison.lowestHotel, estimatedPrice: fromUsd(priceComparison.lowestHotel.estimatedPrice, currency) } : undefined
   };
 }
 
