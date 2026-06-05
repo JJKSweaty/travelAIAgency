@@ -124,7 +124,8 @@ export function providerHealth() {
       cars: process.env.CARS_API_KEY ? "live-ready" : "fallback",
       restaurants: process.env.RESTAURANTS_API_KEY ? "live-ready" : "fallback",
       attractions: process.env.ATTRACTIONS_API_KEY ? "live-ready" : "fallback",
-      ai: isOllamaConfigured() ? "ollama-ready" : "fallback"
+      ai: isOllamaConfigured() ? "ollama-ready" : "fallback",
+      aiModel: process.env.OLLAMA_MODEL ?? null
     },
     fallbackAvailable: true
   };
