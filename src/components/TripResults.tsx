@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BedDouble, Bookmark, Calendar, Car, ChefHat, Coffee, Hotel, MapPinned, Moon, Plane, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
+import { ArrowLeft, BedDouble, Bookmark, Calendar, Car, ChefHat, ChevronDown, Coffee, Hotel, MapPinned, Moon, Plane, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
 import { BudgetMeter } from "@/components/BudgetMeter";
 import { PriceComparisonChart } from "@/components/PriceComparisonChart";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { applyTripSelectionsToBudget } from "@/lib/travel/pricing";
 import { isTripSaved, readCurrentTrip, saveTrip, updateSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
 import { buildTransitPlan } from "@/lib/travel/transit";
 import { formatMoney } from "@/lib/travel/currency";
-import type { ItineraryAddition, ItineraryAdditionCategory, ItineraryDay, RefinementIntent, TripPlan, TripStaySelection } from "@/lib/travel/types";
+import type { ItineraryAddition, ItineraryAdditionCategory, ItineraryDay, RefinementIntent, TransitPlan, TripPlan, TripStaySelection } from "@/lib/travel/types";
 
 const refinements: { intent: RefinementIntent; label: string }[] = [
   { intent: "cheaper", label: "Cheaper" },
@@ -311,7 +311,6 @@ export function TripResults() {
                     </span>
                     <span className="flex flex-wrap gap-2 text-xs font-medium">
                       <span className="rounded bg-reef/10 px-2 py-1 text-reef">Estimated price</span>
-                      <span className="rounded bg-ink/6 px-2 py-1 text-ink/58">{Math.round(restaurant.confidence * 100)}% confidence</span>
                     </span>
                   </span>
                 </article>
@@ -319,29 +318,14 @@ export function TripResults() {
             </div>
           </Panel>
 
-          <Panel title="Budget table" icon={<Sparkles size={18} />}>
-            <div className="grid gap-2 text-sm">
-              {Object.entries({
-                Lodging: plan.budget.lodging,
-                Transport: plan.budget.transport,
-                Food: plan.budget.food,
-                Activities: plan.budget.activities,
-                Buffer: plan.budget.buffer
-              }).map(([label, value]) => (
-                <div key={label} className="flex justify-between rounded-lg bg-white/70 px-4 py-3">
-                  <span>{label}</span>
-                  <span className="font-semibold">{formatMoney(value, currency)}</span>
-                </div>
-              ))}
-            </div>
-          </Panel>
+          <TripCostPanel plan={plan} />
         </div>
 
         <div className="grid content-start gap-6">
-          <TripSummaryPanel plan={plan} saved={saved} />
-          <RecommendationPanel title="Hotels" icon={<Hotel size={18} />} ctaHref="/options/hotels" ctaLabel="Compare stays" items={plan.hotels.map((hotel) => ({ name: hotel.name, meta: `${hotel.location} - ${formatMoney(hotel.nightlyPrice, currency)}/night`, source: "Estimated price", confidence: hotel.confidence }))} />
-          <RecommendationPanel title="Transport" icon={<Car size={18} />} items={plan.cars.map((car) => ({ name: car.name, meta: `${car.pickupLocation} - ${formatMoney(car.dailyPrice, currency)}/day`, source: "Estimated price", confidence: car.confidence }))} />
-          <RecommendationPanel title="Attractions" icon={<Ticket size={18} />} items={plan.attractions.slice(0, 3).map((attraction) => ({ name: attraction.name, meta: `${attraction.durationHours}h - about ${formatMoney(attraction.estimatedPrice, currency)}`, source: "Estimated price", confidence: attraction.confidence }))} />
+          <TripSummaryPanel plan={plan} />
+          <RecommendationPanel title="Hotels" icon={<Hotel size={18} />} ctaHref="/options/hotels" ctaLabel="Compare stays" items={plan.hotels.map((hotel) => ({ name: hotel.name, meta: `${hotel.location} - ${formatMoney(hotel.nightlyPrice, currency)}/night`, tag: "Stay option" }))} />
+          <RecommendationPanel title="Transport" icon={<Car size={18} />} items={plan.cars.map((car) => ({ name: car.name, meta: `${car.pickupLocation} - ${formatMoney(car.dailyPrice, currency)}/day`, tag: "Local transport" }))} />
+          <RecommendationPanel title="Attractions" icon={<Ticket size={18} />} items={plan.attractions.slice(0, 3).map((attraction) => ({ name: attraction.name, meta: `${attraction.durationHours}h - about ${formatMoney(attraction.estimatedPrice, currency)}`, tag: "Activity" }))} />
           <Panel title="Alternates" icon={<MapPinned size={18} />}>
             <div className="grid gap-3">
               {plan.alternates.map((destination) => (
@@ -350,7 +334,6 @@ export function TripResults() {
                   <span className="mt-1 block text-sm text-ink/60">{destination.summary}</span>
                   <span className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
                     <span className="rounded bg-reef/10 px-2 py-1 text-reef">Alternative destination</span>
-                    <span className="rounded bg-ink/6 px-2 py-1 text-ink/58">{Math.round(destinationConfidence(destination.costLevel) * 100)}% confidence</span>
                   </span>
                 </div>
               ))}
@@ -397,9 +380,13 @@ function TravelActionCard({ href, icon, title, meta }: { href: string; icon: Rea
   );
 }
 
-function TripSummaryPanel({ plan, saved }: { plan: TripPlan; saved: boolean }) {
+function TripSummaryPanel({ plan }: { plan: TripPlan }) {
   const currency = plan.request.currency;
   const lowestFlight = [...plan.priceComparison.flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0];
+  const selectedHotelPrice = plan.selectedHotel ? `${formatMoney(plan.selectedHotel.nightlyPrice, currency)}/night` : "";
+  const selectedFlightDetail = plan.selectedFlightQuote?.airline
+    ? `${plan.selectedFlightQuote.airline} ${plan.selectedFlightQuote.departureTime ?? ""} to ${plan.selectedFlightQuote.arrivalTime ?? ""}`.trim()
+    : "";
   return (
     <Panel title="Trip summary" icon={<Sparkles size={18} />}>
       <div className="grid gap-3 text-sm">
@@ -407,9 +394,17 @@ function TripSummaryPanel({ plan, saved }: { plan: TripPlan; saved: boolean }) {
         <SummaryRow label="Travelers" value={`${plan.request.travelers} traveler${plan.request.travelers === 1 ? "" : "s"}`} />
         <SummaryRow label="Trip estimate" value={formatMoney(plan.budget.totalEstimated, currency)} />
         <SummaryRow label="Budget" value={formatMoney(plan.request.totalBudget, currency)} />
-        <SummaryRow label="Selected hotel" value={plan.selectedHotel?.name ?? plan.selectedStay?.label ?? "Default starting estimate"} />
-        <SummaryRow label="Flight estimate" value={plan.selectedFlightQuote ? `${plan.selectedFlightQuote.displayName} ${formatMoney(plan.selectedFlightQuote.estimatedPrice, currency)}` : lowestFlight ? `${formatMoney(lowestFlight.estimatedPrice, currency)} starting` : "Default starting estimate"} />
-        <SummaryRow label="Save state" value={saved ? "Saved" : "Not saved yet"} />
+        <SummaryRow label="Selected stay" value={plan.selectedHotel ? `${plan.selectedHotel.name} ${selectedHotelPrice}` : plan.selectedStay?.label ?? "Choose a stay"} />
+        <SummaryRow
+          label="Selected flight"
+          value={
+            plan.selectedFlightQuote
+              ? `${plan.selectedFlightQuote.displayName} ${formatMoney(plan.selectedFlightQuote.estimatedPrice, currency)}${selectedFlightDetail ? ` · ${selectedFlightDetail}` : ""}`
+              : lowestFlight
+                ? `Flights from ${formatMoney(lowestFlight.estimatedPrice, currency)}`
+                : "Choose a flight"
+          }
+        />
       </div>
     </Panel>
   );
@@ -421,6 +416,44 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
       <span className="text-ink/52">{label}</span>
       <span className="text-right font-semibold text-ink/78">{value}</span>
     </div>
+  );
+}
+
+function TripCostPanel({ plan }: { plan: TripPlan }) {
+  const currency = plan.request.currency;
+  const nights = Math.max(1, plan.request.tripLengthDays - 1);
+  const selectedHotelNightly = plan.selectedHotel?.nightlyPrice ?? plan.selectedHotelQuote?.estimatedPrice ?? plan.hotels[0]?.nightlyPrice ?? plan.destination.averageNightlyHotel;
+  const selectedFlight = plan.selectedFlightQuote?.estimatedPrice ?? 0;
+  const lodging = Math.round(selectedHotelNightly * nights);
+  const localTransport = plan.cars[0] ? Math.round(plan.cars[0].dailyPrice * plan.request.tripLengthDays) : plan.budget.transport;
+  const food = plan.budget.food;
+  const activities = plan.budget.activities;
+  const rows = [
+    { label: "Flight", value: selectedFlight, detail: plan.selectedFlightQuote ? plan.selectedFlightQuote.displayName : "Not selected yet" },
+    { label: "Hotel", value: lodging, detail: `${nights} night${nights === 1 ? "" : "s"} at ${formatMoney(selectedHotelNightly, currency)}/night` },
+    { label: "Local transport", value: localTransport, detail: plan.cars[0]?.name ?? "Transit and rideshare estimate" },
+    { label: "Activities", value: activities, detail: "Itinerary activity estimate" },
+    { label: "Food", value: food, detail: "Meals and casual dining estimate" }
+  ];
+
+  return (
+    <Panel title="Trip cost" icon={<Sparkles size={18} />}>
+      <div className="grid gap-3">
+        {rows.map((row) => (
+          <div key={row.label} className="flex items-start justify-between gap-4 rounded-lg bg-white/72 px-4 py-3">
+            <span>
+              <span className="block font-semibold">{row.label}</span>
+              <span className="mt-1 block text-sm text-ink/56">{row.detail}</span>
+            </span>
+            <span className="shrink-0 font-semibold">{row.value > 0 ? formatMoney(row.value, currency) : "Select"}</span>
+          </div>
+        ))}
+        <div className="flex items-center justify-between rounded-lg bg-ink px-4 py-4 text-paper">
+          <span className="font-semibold">Total trip estimate</span>
+          <span className="text-2xl font-semibold">{formatMoney(plan.budget.totalEstimated, currency)}</span>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -456,6 +489,8 @@ function ItineraryDayCard({
   updateDraft: (day: number, patch: Partial<{ title: string; category: ItineraryAdditionCategory; estimatedCost: string }>) => void;
   addDayItem: (day: number) => void;
 }) {
+  const [openTransitKey, setOpenTransitKey] = useState<string | null>(null);
+
   return (
     <div className="grid gap-4 rounded-lg border border-ink/10 bg-white/76 p-4 sm:grid-cols-[94px_1fr]">
       <div className="sm:border-r sm:border-ink/10 sm:pr-4">
@@ -472,13 +507,16 @@ function ItineraryDayCard({
           <ItinerarySegment icon={<Moon size={15} />} label="Evening" text={day.evening} />
         </div>
         {(day.transit ?? []).length ? (
-          <div className="mt-3 flex flex-wrap gap-2 rounded-lg bg-reef/10 px-3 py-3 text-xs text-ink/64">
+          <div className="mt-3 grid gap-2 rounded-lg bg-reef/10 px-3 py-3 text-xs text-ink/64">
             <span className="font-semibold uppercase tracking-[0.12em] text-reef">Getting around</span>
             {(day.transit ?? []).map((transit) => (
-              <a key={`${transit.from}-${transit.to}`} className="inline-flex items-center gap-1 rounded bg-white px-2 py-1 font-medium text-ink/68 hover:text-reef" href={transit.mapLink} target="_blank" rel="noreferrer">
-                <Route size={13} aria-hidden />
-                {transit.summary}
-              </a>
+              <TransitDetailCard
+                key={`${transit.from}-${transit.to}`}
+                transit={transit}
+                currency={currency}
+                open={openTransitKey === `${transit.from}-${transit.to}`}
+                onToggle={() => setOpenTransitKey(openTransitKey === `${transit.from}-${transit.to}` ? null : `${transit.from}-${transit.to}`)}
+              />
             ))}
           </div>
         ) : null}
@@ -512,14 +550,13 @@ function ItineraryDayCard({
                     {item.estimatedCost ? <span className="text-xs text-ink/58">about {formatMoney(item.estimatedCost, currency)}</span> : null}
                   </div>
                   {item.transit ? (
-                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-ink/62">
-                      <span className="inline-flex items-center gap-1">
-                        <Route size={13} aria-hidden />
-                        {item.transit.summary}
-                      </span>
-                      <a className="font-medium text-reef hover:underline" href={item.transit.mapLink} target="_blank" rel="noreferrer">
-                        Open route
-                      </a>
+                    <div className="mt-2">
+                      <TransitDetailCard
+                        transit={item.transit}
+                        currency={currency}
+                        open={openTransitKey === item.id}
+                        onToggle={() => setOpenTransitKey(openTransitKey === item.id ? null : item.id)}
+                      />
                     </div>
                   ) : null}
                 </div>
@@ -528,6 +565,37 @@ function ItineraryDayCard({
           ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+function TransitDetailCard({ transit, currency, open, onToggle }: { transit: TransitPlan; currency: TripPlan["request"]["currency"]; open: boolean; onToggle: () => void }) {
+  const cost = transitCostEstimate(transit);
+  return (
+    <div className="rounded-lg bg-white text-ink shadow-sm">
+      <button className="focus-ring flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm font-medium" onClick={onToggle}>
+        <span className="inline-flex items-center gap-2">
+          <Route size={14} className="text-reef" aria-hidden />
+          {transit.summary}
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 transition ${open ? "rotate-180" : ""}`} aria-hidden />
+      </button>
+      {open ? (
+        <div className="grid gap-2 border-t border-ink/10 px-3 py-3 text-sm text-ink/64 sm:grid-cols-3">
+          <span>
+            <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-ink/42">Time</span>
+            {transit.durationMinutes} min
+          </span>
+          <span>
+            <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-ink/42">Estimated cost</span>
+            {cost > 0 ? formatMoney(cost, currency) : "Usually free"}
+          </span>
+          <span>
+            <span className="block text-xs font-semibold uppercase tracking-[0.12em] text-ink/42">Note</span>
+            {transitNote(transit)}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -544,7 +612,7 @@ function Panel({ title, icon, children }: { title: string; icon: React.ReactNode
   );
 }
 
-function RecommendationPanel({ title, icon, items, ctaHref, ctaLabel }: { title: string; icon: React.ReactNode; items: { name: string; meta: string; source?: string; confidence?: number }[]; ctaHref?: string; ctaLabel?: string }) {
+function RecommendationPanel({ title, icon, items, ctaHref, ctaLabel }: { title: string; icon: React.ReactNode; items: { name: string; meta: string; tag?: string }[]; ctaHref?: string; ctaLabel?: string }) {
   return (
     <Panel title={title} icon={icon}>
       <div className="grid gap-3">
@@ -552,10 +620,9 @@ function RecommendationPanel({ title, icon, items, ctaHref, ctaLabel }: { title:
           <div key={item.name} className="rounded-lg bg-white/72 p-3">
             <span className="block font-semibold">{item.name}</span>
             <span className="mt-1 block text-sm text-ink/60">{item.meta}</span>
-            {item.source ? (
+            {item.tag ? (
               <span className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
-                <span className="rounded bg-reef/10 px-2 py-1 text-reef">{item.source}</span>
-                {typeof item.confidence === "number" ? <span className="rounded bg-ink/6 px-2 py-1 text-ink/52">{Math.round(item.confidence * 100)}% confidence</span> : null}
+                <span className="rounded bg-reef/10 px-2 py-1 text-reef">{item.tag}</span>
               </span>
             ) : null}
           </div>
@@ -568,6 +635,23 @@ function RecommendationPanel({ title, icon, items, ctaHref, ctaLabel }: { title:
       </div>
     </Panel>
   );
+}
+
+function transitCostEstimate(transit: TransitPlan) {
+  if (transit.mode === "walk" || transit.mode === "bike") return 0;
+  if (transit.mode === "metro" || transit.mode === "public-transit") return 4;
+  if (transit.mode === "rideshare") return Math.max(10, Math.round(7 + transit.durationMinutes * 0.7));
+  if (transit.mode === "drive") return Math.max(8, Math.round(6 + transit.durationMinutes * 0.45));
+  return 5;
+}
+
+function transitNote(transit: TransitPlan) {
+  if (transit.mode === "walk") return "Good for nearby itinerary stops.";
+  if (transit.mode === "metro" || transit.mode === "public-transit") return "Use local passes or tap-to-pay where available.";
+  if (transit.mode === "rideshare") return "Best for late evenings or luggage-heavy moves.";
+  if (transit.mode === "drive") return "Check parking before leaving the stay.";
+  if (transit.mode === "bike") return "Works best in daylight and protected lanes.";
+  return "Use this as a planning estimate.";
 }
 
 function displayNotes(notes: string[]) {
@@ -600,8 +684,4 @@ function groupItineraryDays(days: ItineraryDay[]) {
 
 function totalDayCost(days: ItineraryDay[]) {
   return days.reduce((sum, day) => sum + day.estimatedCost + (day.additions ?? []).reduce((additionSum, item) => additionSum + (item.estimatedCost ?? 0), 0), 0);
-}
-
-function destinationConfidence(costLevel: number) {
-  return Math.max(0.58, Math.min(0.76, 0.78 - costLevel * 0.03));
 }

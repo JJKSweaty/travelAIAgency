@@ -9,7 +9,7 @@ function recalculateBudget(plan: TripPlan): BudgetBreakdown {
   const baseTotal = plan.budget.packageBaseEstimated ?? plan.budget.totalEstimated;
   const nights = Math.max(1, plan.request.tripLengthDays - 1);
   const hotelDelta = (selectedNightlyHotel(plan) - baselineNightlyHotel(plan)) * nights;
-  const flightDelta = selectedFlight(plan) - baselineFlight(plan);
+  const flightDelta = plan.selectedFlightQuote ? selectedFlight(plan) : 0;
   const totalEstimated = Math.max(0, Math.round(baseTotal + hotelDelta + flightDelta));
   const remaining = Math.round(plan.request.totalBudget - totalEstimated);
 
@@ -35,11 +35,6 @@ function selectedNightlyHotel(plan: TripPlan) {
   return baselineNightlyHotel(plan);
 }
 
-function baselineFlight(plan: TripPlan) {
-  const prices = plan.priceComparison.flights.map((quote) => quote.estimatedPrice);
-  return prices.length ? Math.min(...prices) : 0;
-}
-
 function selectedFlight(plan: TripPlan) {
-  return plan.selectedFlightQuote?.estimatedPrice ?? baselineFlight(plan);
+  return plan.selectedFlightQuote?.estimatedPrice ?? 0;
 }

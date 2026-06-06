@@ -198,6 +198,13 @@ export type SelectedHotelOption = {
   nightlyPrice: number;
   source: string;
   link: string;
+  rating?: number;
+  reviewCount?: number;
+  imageUrl?: string;
+  starRating?: number;
+  amenities?: string[];
+  cancellationNote?: string;
+  totalPrice?: number;
 };
 
 export type SelectedQuoteOption = {
@@ -210,6 +217,13 @@ export type SelectedQuoteOption = {
   link: string;
   source: PriceQuote["source"];
   linkLabel?: string;
+  airline?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  durationMinutes?: number;
+  stops?: number;
+  baggage?: string;
+  packageLevel?: string;
 };
 
 export type TripPlan = {

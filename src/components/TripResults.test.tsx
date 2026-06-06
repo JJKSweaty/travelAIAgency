@@ -19,6 +19,7 @@ describe("TripResults", () => {
   });
 
   it("renders major result sections from the active trip", async () => {
+    const user = userEvent.setup();
     window.sessionStorage.setItem("aiTravelAgency.currentTrip", JSON.stringify(plan));
     render(<TripResults />);
     await waitFor(() => expect(screen.getByRole("heading", { name: "Lisbon" })).toBeInTheDocument());
@@ -31,8 +32,13 @@ describe("TripResults", () => {
     expect(screen.queryByText(/search travel options/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /stays from/i })).toHaveAttribute("href", "/options/hotels");
     expect(screen.getByRole("link", { name: /flights from/i })).toHaveAttribute("href", "/options/flights");
-    expect(screen.getAllByText(/estimated price/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: /trip cost/i })).toBeInTheDocument();
+    expect(screen.queryByText(/budget table/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/save state/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/confidence/i)).not.toBeInTheDocument();
     expect(screen.getByText(/getting around/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /morning: metro about 20 min/i }));
+    expect(screen.getByText(/estimated cost/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try another destination/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save trip/i })).toBeInTheDocument();
   });

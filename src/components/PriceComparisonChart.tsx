@@ -20,8 +20,8 @@ export function PriceComparisonChart({ comparison, currency }: { comparison: Pri
         </div>
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
-        <QuoteGroup title="Flights" icon={<Plane size={18} />} quotes={comparison.flights} currency={currency} href="/options/flights" cta="Compare flight packages" />
-        <QuoteGroup title="Hotels" icon={<BedDouble size={18} />} quotes={comparison.hotels} currency={currency} href="/options/hotels" cta="Compare stay packages" />
+        <QuoteGroup title="Flights" icon={<Plane size={18} />} quotes={comparison.flights} currency={currency} href="/options/flights" cta="Compare flights" />
+        <QuoteGroup title="Hotels" icon={<BedDouble size={18} />} quotes={comparison.hotels} currency={currency} href="/options/hotels" cta="Compare stays" />
       </div>
     </section>
   );
@@ -42,7 +42,7 @@ function QuoteGroup({ title, icon, quotes, currency, href, cta }: { title: strin
           return (
             <div key={quote.id} className="rounded-lg bg-white/76 p-3">
               <div className="flex items-center justify-between gap-3 text-sm">
-                <span className="font-semibold">{quote.displayName}</span>
+                <span className="font-semibold">{quoteLabel(quote, index)}</span>
                 <span className="font-semibold">
                   {formatMoney(quote.estimatedPrice, currency)} <span className="text-xs font-medium text-ink/48">/{quote.unit}</span>
                 </span>
@@ -54,7 +54,6 @@ function QuoteGroup({ title, icon, quotes, currency, href, cta }: { title: strin
                 <span className="flex flex-wrap gap-2 font-medium">
                   <Badge>{quote.category === "flight" ? "Flight package" : "Stay package"}</Badge>
                   <Badge variant="secondary">{quote.linkLabel?.startsWith("Exact") ? "Date-aware" : "Flexible dates"}</Badge>
-                  <Badge variant="secondary">{Math.round(quote.confidence * 100)}% confidence</Badge>
                 </span>
               </div>
             </div>
@@ -66,4 +65,11 @@ function QuoteGroup({ title, icon, quotes, currency, href, cta }: { title: strin
       </Button>
     </div>
   );
+}
+
+function quoteLabel(quote: PriceQuote, index: number) {
+  if (quote.category === "flight") {
+    return ["Best value fare", "Flexible fare", "Lower fare", "Comfort fare"][index] ?? "Flight fare";
+  }
+  return ["Value stay estimate", "Central stay estimate", "Flexible stay estimate", "Upgraded stay estimate"][index] ?? "Stay estimate";
 }
