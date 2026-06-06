@@ -1,5 +1,5 @@
-import { destinations } from "./fallback-data";
-import type { DestinationOption, LocationOption, LocationSuggestionMode } from "./types";
+import { searchLocalLocations } from "./locationSearch";
+import type { LocationOption, LocationSuggestionMode } from "./types";
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -23,28 +23,25 @@ type LocationSearchOptions = {
   fetcher?: FetchLike;
 };
 
+type GeocodeCacheEntry = {
+  expiresAt: number;
+  locations: LocationOption[];
+};
+
+const GEOCODE_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+const geocodeCache = new Map<string, GeocodeCacheEntry>();
+
 export async function suggestLocations(query: string, options: LocationSearchOptions = {}): Promise<LocationOption[]> {
   const mode = options.mode ?? "destination";
   const limit = normalizeLimit(options.limit);
-  const fallback = suggestFallbackLocations(query, mode, limit);
-  const geocoded = await searchOpenMeteoLocations(query, limit, options.fetcher ?? fetch);
-  return mergeLocations([...geocoded, ...fallback], query, mode, limit);
+  const local = searchLocalLocations(query, mode, limit);
+  const shouldUseGeocoding = query.trim().length >= 2 && !hasStrongLocalMatch(local, query);
+  const geocoded = shouldUseGeocoding ? await searchOpenMeteoLocations(query, limit, options.fetcher ?? fetch) : [];
+  return mergeLocations([...localResultsFirst(local, query), ...geocoded, ...local], query, mode, limit);
 }
 
 export function suggestFallbackLocations(query: string, mode: LocationSuggestionMode = "destination", limit = 8): LocationOption[] {
-  const normalized = query.trim().toLowerCase();
-  const ranked = destinations
-    .map((destination) => ({
-      location: locationFromDestination(destination),
-      score: normalized ? locationMatchScore(destination, normalized) : destination.trendingScore
-    }))
-    .filter((entry) => !normalized || entry.score > 0)
-    .sort((a, b) => b.score - a.score || Number(b.location.population ?? 0) - Number(a.location.population ?? 0))
-    .slice(0, limit)
-    .map((entry) => entry.location);
-
-  if (!normalized) return ranked;
-  return mergeLocations([customLocation(query, mode), ...ranked], query, mode, limit);
+  return searchLocalLocations(query, mode, normalizeLimit(limit));
 }
 
 export function parseLocationLabel(value: string) {
@@ -66,7 +63,9 @@ export function locationSlug(value: string) {
 
 async function searchOpenMeteoLocations(query: string, limit: number, fetcher: FetchLike): Promise<LocationOption[]> {
   const trimmed = query.trim();
-  if (trimmed.length < 2) return [];
+  const cacheKey = `${trimmed.toLowerCase()}:${limit}`;
+  const cached = geocodeCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.locations;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), Number(process.env.LOCATION_SEARCH_TIMEOUT_MS ?? 2500));
@@ -82,7 +81,9 @@ async function searchOpenMeteoLocations(query: string, limit: number, fetcher: F
     const response = await fetcher(url.toString(), { signal: controller.signal });
     if (!response.ok) return [];
     const payload = (await response.json()) as OpenMeteoSearchResponse;
-    return (payload.results ?? []).map(locationFromOpenMeteo).filter((location): location is LocationOption => Boolean(location));
+    const locations = (payload.results ?? []).map(locationFromOpenMeteo).filter((location): location is LocationOption => Boolean(location));
+    geocodeCache.set(cacheKey, { locations, expiresAt: Date.now() + GEOCODE_CACHE_TTL_MS });
+    return locations;
   } catch {
     return [];
   } finally {
@@ -95,6 +96,7 @@ function locationFromOpenMeteo(location: OpenMeteoLocation): LocationOption | nu
   const country = location.country?.trim() || "Global location";
   const label = country ? `${location.name}, ${country}` : location.name;
   const region = uniqueStrings([location.admin1, country]).join(", ");
+  const localAirport = searchLocalLocations(label, "destination", 1).find((item) => normalize(item.name) === normalize(location.name ?? "") || normalize(item.label) === normalize(label));
   return {
     id: `geocoding-${location.id ?? locationSlug(label)}`,
     name: location.name,
@@ -102,23 +104,43 @@ function locationFromOpenMeteo(location: OpenMeteoLocation): LocationOption | nu
     label,
     source: "geocoding",
     detail: region || "Global location",
+    airportCode: localAirport?.airportCode,
     latitude: numberValue(location.latitude),
     longitude: numberValue(location.longitude),
     population: numberValue(location.population)
   };
 }
 
-function locationFromDestination(destination: DestinationOption): LocationOption {
-  return {
-    id: `curated-${destination.id}`,
-    name: destination.name,
-    country: destination.country,
-    label: `${destination.name}, ${destination.country}`,
-    source: "curated",
-    detail: "Curated travel seed",
-    costLevel: destination.costLevel,
-    bestFor: destination.bestFor
-  };
+function hasStrongLocalMatch(locations: LocationOption[], query: string) {
+  const normalized = normalize(query);
+  return locations.some((location) => {
+    if (location.source === "custom") return false;
+    return normalize(location.name).startsWith(normalized) || normalize(location.label).startsWith(normalized) || normalize(location.airportCode ?? "") === normalized;
+  });
+}
+
+function localResultsFirst(locations: LocationOption[], query: string) {
+  const normalized = normalize(query);
+  return locations.filter((location) => location.source !== "custom" && (normalize(location.name).startsWith(normalized) || normalize(location.label).startsWith(normalized)));
+}
+
+function mergeLocations(locations: LocationOption[], query: string, mode: LocationSuggestionMode, limit: number) {
+  const normalizedQuery = normalize(query);
+  const seen = new Set<string>();
+  const merged: LocationOption[] = [];
+
+  for (const location of locations) {
+    const key = `${location.name},${location.country},${location.airportCode ?? ""}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(location);
+  }
+
+  if (normalizedQuery && !merged.some((location) => normalize(location.label) === normalizedQuery || normalize(location.name) === normalizedQuery)) {
+    merged.unshift(customLocation(query, mode));
+  }
+
+  return merged.slice(0, limit);
 }
 
 function customLocation(query: string, mode: LocationSuggestionMode): LocationOption {
@@ -133,50 +155,12 @@ function customLocation(query: string, mode: LocationSuggestionMode): LocationOp
   };
 }
 
-function mergeLocations(locations: LocationOption[], query: string, mode: LocationSuggestionMode, limit: number) {
-  const normalizedQuery = query.trim().toLowerCase();
-  const seen = new Set<string>();
-  const merged: LocationOption[] = [];
-
-  for (const location of locations) {
-    const key = `${location.name},${location.country}`.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(location);
-  }
-
-  if (normalizedQuery && !merged.some((location) => location.label.toLowerCase() === normalizedQuery || location.name.toLowerCase() === normalizedQuery)) {
-    merged.unshift(customLocation(query, mode));
-  }
-
-  return merged.slice(0, limit);
-}
-
-function locationMatchScore(destination: DestinationOption, normalized: string): number {
-  const name = destination.name.toLowerCase();
-  const country = destination.country.toLowerCase();
-  const interests = destination.bestFor.join(" ");
-
-  if (name === normalized) return 140;
-  if (`${name}, ${country}` === normalized) return 135;
-  if (name.startsWith(normalized)) return 110;
-  if (name.includes(normalized)) return 85;
-  if (country.startsWith(normalized)) return 45;
-  if (country.includes(normalized)) return 32;
-  if (interests.includes(normalized)) return 20;
-  return 0;
-}
-
-function titleCase(value: string) {
-  return value
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
 function normalizeLimit(limit = 8) {
   return Math.min(100, Math.max(1, Math.round(limit)));
+}
+
+function normalize(value: string) {
+  return value.trim().toLowerCase();
 }
 
 function numberValue(value: unknown) {
@@ -186,4 +170,12 @@ function numberValue(value: unknown) {
 function uniqueStrings(values: Array<string | undefined>) {
   const cleaned = values.map((value) => value?.trim()).filter((value): value is string => Boolean(value));
   return cleaned.filter((value, index) => cleaned.indexOf(value) === index);
+}
+
+function titleCase(value: string) {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

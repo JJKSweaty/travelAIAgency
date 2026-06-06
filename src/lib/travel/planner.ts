@@ -250,10 +250,10 @@ export function providerHealth() {
   return {
     configuredProviders: {
       destinations: process.env.TRAVEL_TRENDS_API_KEY ? "live-ready" : "fallback",
-      locations: "open-meteo-geocoding",
-      hotels: process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY ? "google-places-ready" : "demo-catalog",
-      flights: process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET ? "amadeus-ready" : "fallback",
-      priceComparison: process.env.TRAVEL_PRICE_API_KEY || (process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET) ? "live-ready" : "fallback",
+      locations: "local-airport-city-index",
+      hotels: process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY ? "google-places-ready" : process.env.SERPAPI_KEY ? "serpapi-google-hotels-ready" : "demo-catalog",
+      flights: process.env.SERPAPI_KEY ? "serpapi-google-flights-ready" : process.env.KIWI_TEQUILA_API_KEY || process.env.TEQUILA_API_KEY ? "kiwi-ready" : process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET ? "amadeus-ready" : "fallback",
+      priceComparison: process.env.SERPAPI_KEY || process.env.TRAVEL_PRICE_API_KEY || (process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET) ? "live-ready" : "fallback",
       cars: process.env.CARS_API_KEY ? "live-ready" : "fallback",
       restaurants: process.env.RESTAURANTS_API_KEY ? "live-ready" : "fallback",
       attractions: process.env.ATTRACTIONS_API_KEY ? "live-ready" : "fallback",

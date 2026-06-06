@@ -155,12 +155,11 @@ export class GooglePlacesHotelSearchProvider implements HotelSearchProvider {
           const imageUrl = place.photos?.[0]?.name ? await googlePlacePhotoUrl(place.photos[0].name, apiKey) : undefined;
           const name = place.displayName?.text?.trim();
           if (!name) return null;
-          const nightlyPrice = Math.round(destination.averageNightlyHotel * googlePriceFactor(place.priceLevel, index));
           return {
             id: place.id ? `google-places-${place.id}` : `${destination.id}-google-place-${index + 1}`,
             name,
             location: place.formattedAddress ?? destination.name,
-            nightlyPrice,
+            nightlyPrice: 0,
             rating: typeof place.rating === "number" ? place.rating : 0,
             source: "Google Places",
             link: place.websiteUri ?? place.googleMapsUri ?? `https://www.google.com/travel/hotels?q=${encodeURIComponent(`${name} ${destinationLabel(destination)}`)}`,
@@ -515,17 +514,6 @@ async function googlePlacePhotoUrl(photoName: string, apiKey: string) {
   if (!response.ok) return undefined;
   const payload = (await response.json()) as GooglePlacePhotoResponse;
   return payload.photoUri;
-}
-
-function googlePriceFactor(priceLevel?: string, index = 0) {
-  const factors: Record<string, number> = {
-    PRICE_LEVEL_FREE: 0.75,
-    PRICE_LEVEL_INEXPENSIVE: 0.78,
-    PRICE_LEVEL_MODERATE: 1,
-    PRICE_LEVEL_EXPENSIVE: 1.25,
-    PRICE_LEVEL_VERY_EXPENSIVE: 1.55
-  };
-  return factors[priceLevel ?? ""] ?? [0.9, 1, 1.14, 1.28, 0.82][index % 5];
 }
 
 function googleHotelAmenities(types?: string[]) {

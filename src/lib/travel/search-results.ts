@@ -1,4 +1,4 @@
-import type { HotelOption, PriceQuote, SelectedHotelOption, SelectedQuoteOption, TripPlan } from "./types";
+import type { FlightResult, HotelOption, HotelResult, PriceQuote, SelectedHotelOption, SelectedQuoteOption, TripPlan } from "./types";
 
 export type FlightSort = "best-value" | "cheapest" | "fastest";
 export type FlightStopFilter = "any" | "nonstop" | "one-stop";
@@ -17,23 +17,27 @@ export type FlightSearchOption = {
   sourceQuoteId: string;
   category: "flight";
   airline: string;
-  flightNumber: string;
+  flightNumber: string | null;
   departureTime: string;
   arrivalTime: string;
   departureWindow: Exclude<FlightDepartureFilter, "any">;
-  durationMinutes: number;
+  durationMinutes: number | null;
   stops: number;
   stopLabel: string;
   routeDetail: string;
-  baggage: string;
-  packageLevel: string;
+  baggage: string | null;
+  packageLevel: string | null;
   packageQuality: Exclude<FlightPackageFilter, "any">;
-  fareNote: string;
-  price: number;
+  fareNote: string | null;
+  price: number | null;
+  hasKnownPrice: boolean;
   score: number;
   link: string;
   source: PriceQuote["source"];
   provider: string;
+  sourceLabel: string;
+  fetchedAt: string;
+  bookingToken: string | null;
 };
 
 export type HotelSort = "best-value" | "lowest-price" | "highest-rated" | "closest";
@@ -53,27 +57,30 @@ export type HotelSearchOption = {
   name: string;
   location: string;
   imageUrl: string;
-  nightlyPrice: number;
+  nightlyPrice: number | null;
   priceSource: NonNullable<HotelOption["priceSource"]>;
-  totalPrice: number;
+  totalPrice: number | null;
   hasKnownPrice: boolean;
-  rating: number;
-  reviewCount: number;
-  starRating: number;
-  description: string;
+  rating: number | null;
+  reviewCount: number | null;
+  starRating: number | null;
+  description: string | null;
   amenities: string[];
-  cancellationNote: string;
+  cancellationNote: string | null;
   freeCancellation: boolean;
   breakfastIncluded: boolean;
   proximity: Exclude<HotelProximityFilter, "any">;
-  distanceKm: number;
+  distanceKm: number | null;
   tier: Exclude<HotelTierFilter, "any">;
   valueScore: number;
   source: string;
   link: string;
+  sourceLabel: string;
+  fetchedAt: string;
+  propertyToken: string | null;
 };
 
-const airlinePool = ["Air Canada", "TAP Air Portugal", "Delta", "United", "Lufthansa", "Air France", "WestJet", "British Airways"];
+export type ProviderSearchLink = { id: string; label: string; url: string };
 
 export function buildFlightResults(plan: TripPlan): FlightSearchOption[] {
   const quotes = plan.priceComparison.flights.filter((quote) => quote.airline && quote.departureTime && quote.arrivalTime && quote.durationMinutes);
@@ -111,12 +118,61 @@ export function buildFlightResults(plan: TripPlan): FlightSearchOption[] {
       packageQuality,
       fareNote: quote.refundableNote ?? "Check fare rules before booking",
       price: quote.estimatedPrice,
+      hasKnownPrice: quote.priceSource !== "unavailable",
       score,
       link: quote.link,
       source: quote.source,
-      provider: quote.provider
+      provider: quote.provider,
+      sourceLabel: sourceLabelFor(quote.provider),
+      fetchedAt: quote.lastChecked,
+      bookingToken: null
     };
   });
+}
+
+export function flightResultsToSearchOptions(results: FlightResult[], fallbackLinks: ProviderSearchLink[] = []): FlightSearchOption[] {
+  return results
+    .map((result, index): FlightSearchOption | null => {
+      if (!result.airlineName || !result.departureTime || !result.arrivalTime) return null;
+      const durationMinutes = durationMinutesFrom(result.duration);
+      const departureTime = displayFlightTime(result.departureTime);
+      const arrivalTime = displayFlightTime(result.arrivalTime);
+      const stops = Math.max(0, result.stops ?? result.layovers.length);
+      const stopLabel = stops === 0 ? "Nonstop" : stops === 1 ? "1 stop" : `${stops} stops`;
+      const fareLabel = result.cabin ?? result.fareType;
+      const price = result.totalPrice ?? result.pricePerTraveler;
+      const link = result.sourceUrl ?? fallbackLinks[0]?.url ?? "";
+      const routeDetail = [result.originAirport, result.destinationAirport].filter(Boolean).join(" to ");
+
+      return {
+        id: result.id,
+        sourceQuoteId: result.id,
+        category: "flight",
+        airline: result.airlineName,
+        flightNumber: result.flightNumber,
+        departureTime,
+        arrivalTime,
+        departureWindow: departureWindowFor(departureTime),
+        durationMinutes,
+        stops,
+        stopLabel,
+        routeDetail: routeDetail || "Route details unavailable",
+        baggage: result.baggage.length ? result.baggage.join(", ") : null,
+        packageLevel: fareLabel,
+        packageQuality: fareQuality(fareLabel ?? undefined),
+        fareNote: result.fareType,
+        price,
+        hasKnownPrice: price !== null,
+        score: valueScore({ price, durationMinutes, stops, packageQuality: fareQuality(fareLabel ?? undefined) }),
+        link,
+        source: "live",
+        provider: result.source,
+        sourceLabel: `From ${result.source}`,
+        fetchedAt: result.fetchedAt,
+        bookingToken: result.bookingToken
+      };
+    })
+    .filter((option): option is FlightSearchOption => Boolean(option));
 }
 
 export function filterFlightResults(options: FlightSearchOption[], filters: FlightFilterState) {
@@ -132,9 +188,13 @@ export function filterFlightResults(options: FlightSearchOption[], filters: Flig
 
 export function sortFlightResults(options: FlightSearchOption[], sort: FlightSort) {
   return [...options].sort((a, b) => {
-    if (sort === "cheapest") return a.price - b.price || a.durationMinutes - b.durationMinutes;
-    if (sort === "fastest") return a.durationMinutes - b.durationMinutes || a.price - b.price;
-    return b.score - a.score || a.price - b.price;
+    const priceA = knownPriceForSort(a.price);
+    const priceB = knownPriceForSort(b.price);
+    const durationA = knownDurationForSort(a.durationMinutes);
+    const durationB = knownDurationForSort(b.durationMinutes);
+    if (sort === "cheapest") return priceA - priceB || durationA - durationB;
+    if (sort === "fastest") return durationA - durationB || priceA - priceB;
+    return b.score - a.score || priceA - priceB;
   });
 }
 
@@ -143,18 +203,18 @@ export function flightToSelectedQuote(option: FlightSearchOption): SelectedQuote
     id: option.id,
     category: "flight",
     provider: option.provider,
-    displayName: `${option.airline} ${option.packageLevel}`,
-    estimatedPrice: option.price,
+    displayName: `${option.airline}${option.packageLevel ? ` ${option.packageLevel}` : ""}`,
+    estimatedPrice: option.price ?? 0,
     unit: "round-trip",
     link: option.link,
     source: option.source,
     airline: option.airline,
     departureTime: option.departureTime,
     arrivalTime: option.arrivalTime,
-    durationMinutes: option.durationMinutes,
+    durationMinutes: option.durationMinutes ?? undefined,
     stops: option.stops,
-    baggage: option.baggage,
-    packageLevel: option.packageLevel
+    baggage: option.baggage ?? undefined,
+    packageLevel: option.packageLevel ?? undefined
   };
 }
 
@@ -197,9 +257,58 @@ export function buildHotelResults(plan: TripPlan): HotelSearchOption[] {
       tier,
       valueScore: hotelValueScore(hotel.nightlyPrice, hotel.rating, distanceKm, tier),
       source: hotel.source,
-      link: hotel.link
+      link: hotel.link,
+      sourceLabel: sourceLabelFor(hotel.source),
+      fetchedAt: new Date().toISOString(),
+      propertyToken: hotel.placeId ?? null
     };
   });
+}
+
+export function hotelResultsToSearchOptions(results: HotelResult[], plan: TripPlan, fallbackLinks: ProviderSearchLink[] = []): HotelSearchOption[] {
+  const nights = tripNights(plan);
+  return results
+    .map((hotel): HotelSearchOption | null => {
+      if (!hotel.name) return null;
+      const nightlyPrice = hotel.pricePerNight ?? (hotel.totalPrice !== null ? Math.round(hotel.totalPrice / nights) : null);
+      const totalPrice = hotel.totalPrice ?? (nightlyPrice !== null ? Math.round(nightlyPrice * nights) : null);
+      const hasKnownPrice = nightlyPrice !== null || totalPrice !== null;
+      const location = hotel.address ?? hotel.area ?? plan.destination.name;
+      const amenities = hotel.amenities.slice(0, 4);
+      const freeCancellation = amenities.some((amenity) => /free cancellation/i.test(amenity)) || /free cancellation/i.test(hotel.cancellationPolicy ?? "");
+      const breakfastIncluded = amenities.some((amenity) => /breakfast/i.test(amenity));
+      const distanceKm = hotel.distanceFromCenter;
+      const tier = hotelTierFromValues(nightlyPrice, hotel.guestRating, plan);
+
+      return {
+        id: hotel.id,
+        name: hotel.name,
+        location,
+        imageUrl: hotel.imageUrl ?? "",
+        nightlyPrice,
+        priceSource: hasKnownPrice ? "live" : "unavailable",
+        totalPrice,
+        hasKnownPrice,
+        rating: hotel.guestRating,
+        reviewCount: hotel.reviewCount,
+        starRating: hotel.starRating,
+        description: hotel.description,
+        amenities,
+        cancellationNote: hotel.cancellationPolicy,
+        freeCancellation,
+        breakfastIncluded,
+        proximity: hotelProximityFromLocation(location, plan),
+        distanceKm,
+        tier,
+        valueScore: hotelValueScore(nightlyPrice, hotel.guestRating, distanceKm, tier),
+        source: hotel.source,
+        link: hotel.sourceUrl ?? fallbackLinks[0]?.url ?? "",
+        sourceLabel: `From ${hotel.source}`,
+        fetchedAt: hotel.fetchedAt,
+        propertyToken: hotel.propertyToken
+      };
+    })
+    .filter((option): option is HotelSearchOption => Boolean(option));
 }
 
 export function filterHotelResults(options: HotelSearchOption[], filters: HotelFilterState) {
@@ -207,7 +316,7 @@ export function filterHotelResults(options: HotelSearchOption[], filters: HotelF
     if (filters.freeCancellation && !option.freeCancellation) return false;
     if (filters.breakfastIncluded && !option.breakfastIncluded) return false;
     if (filters.proximity !== "any" && option.proximity !== filters.proximity) return false;
-    if (filters.starRating !== "any" && option.starRating < Number(filters.starRating)) return false;
+    if (filters.starRating !== "any" && (option.starRating ?? 0) < Number(filters.starRating)) return false;
     if (filters.tier !== "any" && option.tier !== filters.tier) return false;
     return true;
   });
@@ -215,10 +324,16 @@ export function filterHotelResults(options: HotelSearchOption[], filters: HotelF
 
 export function sortHotelResults(options: HotelSearchOption[], sort: HotelSort) {
   return [...options].sort((a, b) => {
-    if (sort === "lowest-price") return a.nightlyPrice - b.nightlyPrice || b.rating - a.rating;
-    if (sort === "highest-rated") return b.rating - a.rating || a.nightlyPrice - b.nightlyPrice;
-    if (sort === "closest") return a.distanceKm - b.distanceKm || b.rating - a.rating;
-    return b.valueScore - a.valueScore || a.nightlyPrice - b.nightlyPrice;
+    const priceA = knownPriceForSort(a.nightlyPrice);
+    const priceB = knownPriceForSort(b.nightlyPrice);
+    const ratingA = a.rating ?? 0;
+    const ratingB = b.rating ?? 0;
+    const distanceA = knownDurationForSort(a.distanceKm);
+    const distanceB = knownDurationForSort(b.distanceKm);
+    if (sort === "lowest-price") return priceA - priceB || ratingB - ratingA;
+    if (sort === "highest-rated") return ratingB - ratingA || priceA - priceB;
+    if (sort === "closest") return distanceA - distanceB || ratingB - ratingA;
+    return b.valueScore - a.valueScore || priceA - priceB;
   });
 }
 
@@ -227,16 +342,16 @@ export function hotelToSelectedHotel(option: HotelSearchOption): SelectedHotelOp
     id: option.id,
     name: option.name,
     location: option.location,
-    nightlyPrice: option.nightlyPrice,
+    nightlyPrice: option.nightlyPrice ?? 0,
     source: option.source,
     link: option.link,
-    rating: option.rating,
-    reviewCount: option.reviewCount,
+    rating: option.rating ?? undefined,
+    reviewCount: option.reviewCount ?? undefined,
     imageUrl: option.imageUrl,
-    starRating: option.starRating,
+    starRating: option.starRating ?? undefined,
     amenities: option.amenities,
-    cancellationNote: option.cancellationNote,
-    totalPrice: option.totalPrice,
+    cancellationNote: option.cancellationNote ?? undefined,
+    totalPrice: option.totalPrice ?? undefined,
     priceSource: option.priceSource
   };
 }
@@ -260,13 +375,15 @@ function valueScore({
   stops,
   packageQuality
 }: {
-  price: number;
-  durationMinutes: number;
+  price: number | null;
+  durationMinutes: number | null;
   stops: number;
   packageQuality: Exclude<FlightPackageFilter, "any">;
 }) {
   const qualityBoost = { basic: 0, standard: 18, flexible: 28, premium: 24 }[packageQuality];
-  return Math.round(220 - price / 12 - durationMinutes / 18 - stops * 18 + qualityBoost);
+  const pricePenalty = price === null ? 95 : price / 12;
+  const durationPenalty = durationMinutes === null ? 35 : durationMinutes / 18;
+  return Math.round(220 - pricePenalty - durationPenalty - stops * 18 + qualityBoost);
 }
 
 function fareQuality(fareType?: string): Exclude<FlightPackageFilter, "any"> {
@@ -282,9 +399,10 @@ function routeDetailForQuote(quote: PriceQuote, plan: TripPlan) {
   return route;
 }
 
-function hotelValueScore(price: number, rating: number, distanceKm: number, tier: Exclude<HotelTierFilter, "any">) {
+function hotelValueScore(price: number | null, rating: number | null, distanceKm: number | null, tier: Exclude<HotelTierFilter, "any">) {
   const tierBoost = tier === "midrange" ? 12 : tier === "luxury" ? 8 : 6;
-  return Math.round(rating * 28 - price / 9 - distanceKm * 5 + tierBoost);
+  const pricePenalty = price === null ? 24 : price / 9;
+  return Math.round((rating ?? 0) * 28 - pricePenalty - (distanceKm ?? 2.5) * 5 + tierBoost);
 }
 
 function hotelTier(hotel: HotelOption, plan: TripPlan): Exclude<HotelTierFilter, "any"> {
@@ -294,8 +412,21 @@ function hotelTier(hotel: HotelOption, plan: TripPlan): Exclude<HotelTierFilter,
   return "midrange";
 }
 
+function hotelTierFromValues(nightlyPrice: number | null, rating: number | null, plan: TripPlan): Exclude<HotelTierFilter, "any"> {
+  if (nightlyPrice === null) return "midrange";
+  const ratio = nightlyPrice / Math.max(1, plan.destination.averageNightlyHotel);
+  if (ratio <= 0.82) return "budget";
+  if (ratio >= 1.25 || (rating ?? 0) >= 4.65) return "luxury";
+  return "midrange";
+}
+
 function hotelProximity(hotel: HotelOption, plan: TripPlan): Exclude<HotelProximityFilter, "any"> {
   if (plan.destination.bestFor.includes("beaches") || /beach|waterfront|coast|harbor|bay/i.test(hotel.location)) return "beachfront";
+  return "near-attractions";
+}
+
+function hotelProximityFromLocation(location: string, plan: TripPlan): Exclude<HotelProximityFilter, "any"> {
+  if (plan.destination.bestFor.includes("beaches") || /beach|waterfront|coast|harbor|bay/i.test(location)) return "beachfront";
   return "near-attractions";
 }
 
@@ -314,12 +445,42 @@ function normalizeAmenities(amenities: string[], flags: { freeCancellation: bool
 }
 
 function departureWindowFor(value: string): Exclude<FlightDepartureFilter, "any"> {
-  const match = /^(\d{1,2}):(\d{2})\s(AM|PM)$/.exec(value);
-  if (!match) return "morning";
-  const hour = (Number(match[1]) % 12) + (match[3] === "PM" ? 12 : 0);
+  const twelveHour = /^(\d{1,2}):(\d{2})\s(AM|PM)$/i.exec(value);
+  const twentyFourHour = /(?:^|\s|T)(\d{1,2}):(\d{2})/.exec(value);
+  const hour = twelveHour ? (Number(twelveHour[1]) % 12) + (twelveHour[3].toUpperCase() === "PM" ? 12 : 0) : twentyFourHour ? Number(twentyFourHour[1]) : 8;
   if (hour < 12) return "morning";
   if (hour < 17) return "afternoon";
   return "evening";
+}
+
+function displayFlightTime(value: string) {
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const parsed = new Date(normalized);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  }
+  return value;
+}
+
+function durationMinutesFrom(value: number | string | null) {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.round(value);
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(parsed)) return Math.round(parsed);
+  }
+  return null;
+}
+
+function knownPriceForSort(value: number | null) {
+  return value === null ? Number.POSITIVE_INFINITY : value;
+}
+
+function knownDurationForSort(value: number | null) {
+  return value === null ? Number.POSITIVE_INFINITY : value;
+}
+
+function sourceLabelFor(value: string) {
+  return value.startsWith("From ") ? value : `From ${value}`;
 }
 
 function airlineCode(airline: string) {

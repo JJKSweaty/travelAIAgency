@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { writeCurrentTrip } from "@/lib/travel/storage";
 import { formatMoney } from "@/lib/travel/currency";
+import { rememberRecentLocation } from "@/lib/travel/locationSearch";
 import type { CityTravelPreference, CurrencyCode, Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
 
 const interestOptions: { id: Interest; label: string }[] = [
@@ -56,12 +57,14 @@ export function TripPlannerWizard() {
   const [destinationSuggestions, setDestinationSuggestions] = useState<LocationOption[]>([]);
   const [showOriginSuggestions, setShowOriginSuggestions] = useState(false);
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
+  const [originSuggestionQuery, setOriginSuggestionQuery] = useState("");
+  const [destinationSuggestionQuery, setDestinationSuggestionQuery] = useState("");
 
   const currency = request.currency ?? "USD";
   const budgetTracker = useMemo(() => deriveBudgetTracker(request), [request]);
 
-  useLocationSuggestions(request.origin, true, "origin", setOriginSuggestions);
-  useLocationSuggestions(request.destination ?? "", request.preferredDestinationEnabled, "destination", setDestinationSuggestions);
+  useLocationSuggestions(originSuggestionQuery, showOriginSuggestions, "origin", setOriginSuggestions);
+  useLocationSuggestions(destinationSuggestionQuery, request.preferredDestinationEnabled && showDestinationSuggestions, "destination", setDestinationSuggestions);
 
   useEffect(() => {
     function handleCurrency(event: Event) {
@@ -139,6 +142,7 @@ export function TripPlannerWizard() {
                     onBlur={() => window.setTimeout(() => setShowOriginSuggestions(false), 120)}
                     onChange={(event) => {
                       setRequest({ ...request, origin: event.target.value });
+                      setOriginSuggestionQuery(event.target.value);
                       setShowOriginSuggestions(true);
                     }}
                   />
@@ -148,6 +152,7 @@ export function TripPlannerWizard() {
                     locations={originSuggestions}
                     selectedValue={request.origin}
                     onSelect={(location) => {
+                      rememberRecentLocation(location);
                       setRequest({ ...request, origin: location.label });
                       setShowOriginSuggestions(false);
                     }}
@@ -185,6 +190,7 @@ export function TripPlannerWizard() {
                     onBlur={() => window.setTimeout(() => setShowDestinationSuggestions(false), 120)}
                     onChange={(event) => {
                       setRequest({ ...request, destination: event.target.value });
+                      setDestinationSuggestionQuery(event.target.value);
                       setShowDestinationSuggestions(true);
                     }}
                   />
@@ -194,6 +200,7 @@ export function TripPlannerWizard() {
                     locations={destinationSuggestions}
                     selectedValue={request.destination ?? ""}
                     onSelect={(location) => {
+                      rememberRecentLocation(location);
                       setRequest({ ...request, destination: location.label });
                       setShowDestinationSuggestions(false);
                     }}
@@ -337,7 +344,8 @@ function useLocationSuggestions(
   setSuggestions: (locations: LocationOption[]) => void
 ) {
   useEffect(() => {
-    if (!enabled) {
+    const trimmed = query.trim();
+    if (!enabled || trimmed.length < 2) {
       setSuggestions([]);
       return;
     }
@@ -345,7 +353,7 @@ function useLocationSuggestions(
     const controller = new AbortController();
     const task = window.setTimeout(async () => {
       try {
-        const response = await fetch(`/api/location-suggestions?q=${encodeURIComponent(query)}&mode=${mode}`, {
+        const response = await fetch(`/api/location-suggestions?q=${encodeURIComponent(trimmed)}&mode=${mode}`, {
           signal: controller.signal
         });
         if (!response.ok) return;
@@ -355,7 +363,7 @@ function useLocationSuggestions(
         if (err instanceof DOMException && err.name === "AbortError") return;
         setSuggestions([]);
       }
-    }, 140);
+    }, 320);
 
     return () => {
       controller.abort();

@@ -51,6 +51,11 @@ describe("TripPlannerWizard", () => {
     expect(screen.getByRole("button", { name: /generate trip plan/i })).toBeInTheDocument();
   });
 
+  it("does not request location suggestions from default form values", () => {
+    render(<TripPlannerWizard />);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("reveals destination input when preferred mode is enabled", async () => {
     const user = userEvent.setup();
     render(<TripPlannerWizard />);

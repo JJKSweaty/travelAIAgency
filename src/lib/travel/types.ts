@@ -2,6 +2,14 @@ export type TravelStyle = "relaxed" | "balanced" | "packed";
 export type TransportPreference = "rental-car" | "public-transit" | "flexible";
 export type CityTravelPreference = "walkable" | "public-transit" | "rideshare" | "rental-car" | "mixed";
 export type CurrencyCode = "USD" | "CAD" | "EUR" | "GBP" | "AUD" | "JPY" | "MXN";
+export type TravelDataSource =
+  | "SerpApi Google Flights"
+  | "Kiwi Tequila"
+  | "Google Places"
+  | "SerpApi Google Hotels"
+  | "Hotel website"
+  | "Provider search";
+export type TravelDataQuality = "provider" | "partial" | "search-link" | "unavailable";
 export type LocationSuggestionMode = "origin" | "destination";
 export type TravelDateMode = "month" | "exact";
 export type Interest =
@@ -50,6 +58,7 @@ export type LocationOption = {
   label: string;
   source: "geocoding" | "curated" | "custom";
   detail?: string;
+  airportCode?: string;
   latitude?: number;
   longitude?: number;
   population?: number;
@@ -180,6 +189,64 @@ export type PriceComparison = {
   sourceNote: string;
 };
 
+export type FlightLayover = {
+  airport?: string;
+  duration?: number | string;
+};
+
+export type FlightResult = {
+  id: string;
+  source: TravelDataSource;
+  sourceUrl: string | null;
+  airlineName: string | null;
+  airlineLogoUrl: string | null;
+  flightNumber: string | null;
+  originAirport: string | null;
+  destinationAirport: string | null;
+  departureTime: string | null;
+  arrivalTime: string | null;
+  duration: number | string | null;
+  stops: number | null;
+  layovers: FlightLayover[];
+  cabin: string | null;
+  baggage: string[];
+  fareType: string | null;
+  pricePerTraveler: number | null;
+  totalPrice: number | null;
+  currency: CurrencyCode;
+  fetchedAt: string;
+  isLivePrice: boolean;
+  dataQuality: TravelDataQuality;
+  bookingToken: string | null;
+};
+
+export type HotelResult = {
+  id: string;
+  source: TravelDataSource;
+  sourceUrl: string | null;
+  propertyToken: string | null;
+  name: string;
+  imageUrl: string | null;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  area: string | null;
+  distanceFromCenter: number | null;
+  starRating: number | null;
+  guestRating: number | null;
+  reviewCount: number | null;
+  description: string | null;
+  amenities: string[];
+  cancellationPolicy: string | null;
+  pricePerNight: number | null;
+  totalPrice: number | null;
+  currency: CurrencyCode;
+  taxesIncluded: boolean | null;
+  fetchedAt: string;
+  isLivePrice: boolean;
+  dataQuality: TravelDataQuality;
+};
+
 export type ItineraryDay = {
   day: number;
   title: string;
@@ -272,6 +339,7 @@ export type TripPlan = {
   selectedHotel?: SelectedHotelOption;
   selectedFlightQuote?: SelectedQuoteOption;
   selectedHotelQuote?: SelectedQuoteOption;
+  travelSearchCache?: TravelSearchCache;
   providerSummary: {
     hotels: ProviderResult<HotelOption>["source"];
     priceComparison: ProviderResult<PriceComparison>["source"];
@@ -281,6 +349,28 @@ export type TripPlan = {
     itinerary: ProviderResult<ItineraryDay>["source"];
   };
   notes: string[];
+};
+
+export type TravelSearchCache = {
+  tripId?: string;
+  origin?: string;
+  destination?: string;
+  dates?: {
+    departureDate?: string;
+    returnDate?: string;
+    checkInDate?: string;
+    checkOutDate?: string;
+  };
+  travelers?: number;
+  rooms?: number;
+  currency?: CurrencyCode;
+  cabinClass?: string | null;
+  flightSearchKey?: string;
+  hotelSearchKey?: string;
+  cachedFlights?: FlightResult[];
+  cachedHotels?: HotelResult[];
+  flightsFetchedAt?: string;
+  hotelsFetchedAt?: string;
 };
 
 export type RefinementIntent =

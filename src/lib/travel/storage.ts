@@ -9,6 +9,10 @@ const legacyCurrentTripKey = "aiTravelAgency.currentTrip";
 const legacySavedTripsKey = "aiTravelAgency.savedTrips";
 
 type SaveMode = "guest" | "account";
+type SupabaseErrorLike = {
+  code?: string;
+  message?: string;
+};
 
 export function writeCurrentTrip(plan: TripPlan) {
   if (typeof window === "undefined") return;
@@ -67,6 +71,7 @@ export async function listSavedTrips(): Promise<TripPlan[]> {
   if (!supabase || !user) return readSavedTrips();
 
   const { data, error } = await supabase.from("trips").select("plan").eq("user_id", user.id).order("updated_at", { ascending: false });
+  if (isTripsTableUnavailable(error)) return readSavedTrips();
   if (error) throw error;
   return (data ?? []).map((row) => row.plan as TripPlan);
 }
@@ -89,6 +94,10 @@ export async function saveTrip(plan: TripPlan): Promise<SaveMode> {
     },
     { onConflict: "user_id,plan_id" }
   );
+  if (isTripsTableUnavailable(error)) {
+    saveTripLocally(plan);
+    return "guest";
+  }
   if (error) throw error;
   return "account";
 }
@@ -100,6 +109,7 @@ export async function isTripSaved(id: string): Promise<boolean> {
   if (!supabase || !user) return isTripSavedLocally(id);
 
   const { data, error } = await supabase.from("trips").select("plan_id").eq("user_id", user.id).eq("plan_id", id).maybeSingle();
+  if (isTripsTableUnavailable(error)) return isTripSavedLocally(id);
   if (error) throw error;
   return Boolean(data);
 }
@@ -119,6 +129,10 @@ export async function removeSavedTrip(id: string) {
   }
 
   const { error } = await supabase.from("trips").delete().eq("user_id", user.id).eq("plan_id", id);
+  if (isTripsTableUnavailable(error)) {
+    removeSavedTripLocally(id);
+    return;
+  }
   if (error) throw error;
 }
 
@@ -138,8 +152,13 @@ export async function importGuestTrips(): Promise<number> {
     })),
     { onConflict: "user_id,plan_id" }
   );
+  if (isTripsTableUnavailable(error)) throw new Error("Account trip storage is not set up yet.");
   if (error) throw error;
   window.localStorage.removeItem(savedTripsKey);
   window.localStorage.removeItem(legacySavedTripsKey);
   return trips.length;
+}
+
+function isTripsTableUnavailable(error: SupabaseErrorLike | null | undefined) {
+  return Boolean(error?.code === "PGRST205" && /public\.trips|table 'trips'|table 'public\.trips'/i.test(error.message ?? ""));
 }

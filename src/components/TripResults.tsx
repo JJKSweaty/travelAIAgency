@@ -45,7 +45,7 @@ export function TripResults() {
         });
         setPlan(normalized);
         writeCurrentTrip(normalized);
-        setSaved(await isTripSaved(normalized.id));
+        setSaved(await isTripSaved(normalized.id).catch(() => false));
       }
       void loadCurrent();
     }, 0);
@@ -56,7 +56,7 @@ export function TripResults() {
     const priced = applyTripSelectionsToBudget(next);
     setPlan(priced);
     writeCurrentTrip(priced);
-    if (saved) void updateSavedTrip(priced);
+    if (saved) void updateSavedTrip(priced).catch(() => undefined);
   }
 
   async function refine(intent: RefinementIntent) {
@@ -175,7 +175,7 @@ export function TripResults() {
           variant="reef"
           size="sm"
           onClick={() => {
-            void saveTrip(plan).then(() => setSaved(true));
+            void saveTrip(plan).then(() => setSaved(true)).catch(() => setSaved(false));
             writeCurrentTrip(plan);
           }}
         >
