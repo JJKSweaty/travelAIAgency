@@ -48,7 +48,7 @@ describe("TripResults", () => {
     const nextPlan: TripPlan = {
       ...plan,
       request: { ...plan.request, excludedHotelIds: ["h"] },
-      hotels: [{ ...plan.hotels[0], id: "h2", name: "Design Stay" }],
+      hotels: [{ ...plan.hotels[0], id: "h2", name: "The Editory Riverside Santa Apolonia Hotel" }],
       notes: ["Refined for: replace hotel."]
     };
     const fetchMock = vi.fn().mockResolvedValue({
@@ -62,7 +62,7 @@ describe("TripResults", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Lisbon" })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /replace hotel/i }));
 
-    await waitFor(() => expect(screen.getAllByText("Design Stay").length).toBeGreaterThan(0));
+    await waitFor(() => expect(screen.getAllByText("The Editory Riverside Santa Apolonia Hotel").length).toBeGreaterThan(0));
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/refine-trip",
       expect.objectContaining({

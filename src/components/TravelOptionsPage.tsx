@@ -212,7 +212,16 @@ function FlightResultsExperience({ plan, onSelect, onBack }: { plan: TripPlan; o
               />
             ))
           ) : (
-            <EmptyState title="No flights match these filters" description="Clear a filter or switch back to Best value to see more routes for this trip." actionLabel="Reset filters" onAction={resetFilters} />
+            <EmptyState
+              title={options.length ? "No flights match these filters" : "No live flights found"}
+              description={
+                options.length
+                  ? "Clear a filter or switch back to Best value to see more routes for this trip."
+                  : "Amadeus did not return structured flight offers for this route and date. Try exact dates, a nearby airport, or a different destination."
+              }
+              actionLabel="Reset filters"
+              onAction={resetFilters}
+            />
           )}
         </div>
       </section>
@@ -281,7 +290,7 @@ function HotelResultsExperience({ plan, onSelect, onBack }: { plan: TripPlan; on
           <div className="rounded-lg border border-ink/10 bg-white p-3 shadow-subtle">
             <div className="grid gap-3 md:grid-cols-4">
               <HotelSortButton label="Best value" active={sort === "best-value"} onClick={() => setSort("best-value")} detail="Location + rating" />
-              <HotelSortButton label="Lowest price" active={sort === "lowest-price"} onClick={() => setSort("lowest-price")} detail={lowest ? `${formatMoney(lowest.nightlyPrice, currency)}/night` : "Lowest nightly"} />
+              <HotelSortButton label="Lowest price" active={sort === "lowest-price"} onClick={() => setSort("lowest-price")} detail={lowest ? (lowest.hasKnownPrice ? `${formatMoney(lowest.nightlyPrice, currency)}/night` : "Check rates") : "Lowest nightly"} />
               <HotelSortButton label="Highest rated" active={sort === "highest-rated"} onClick={() => setSort("highest-rated")} detail={rated ? `${rated.rating.toFixed(1)} guest rating` : "Top reviews"} />
               <HotelSortButton label="Closest to city center" active={sort === "closest"} onClick={() => setSort("closest")} detail={closest ? `${closest.distanceKm.toFixed(1)} km to center` : "City center"} />
             </div>
@@ -305,7 +314,16 @@ function HotelResultsExperience({ plan, onSelect, onBack }: { plan: TripPlan; on
               />
             ))
           ) : (
-            <EmptyState title="No stays match these filters" description="Clear a filter or switch to Best value to restore the curated stay list." actionLabel="Reset filters" onAction={resetFilters} />
+            <EmptyState
+              title={options.length ? "No stays match these filters" : "No hotel results found"}
+              description={
+                options.length
+                  ? "Clear a filter or switch to Best value to restore the stay list."
+                  : "Roamly could not find structured hotel results for this destination. Try a nearby city or configure Google Places, Expedia Rapid, or Booking.com Demand API access."
+              }
+              actionLabel="Reset filters"
+              onAction={resetFilters}
+            />
           )}
         </div>
       </section>
@@ -467,6 +485,7 @@ function FlightCard({ option, currency, selected, onSelect }: { option: FlightSe
                 <Badge variant="gold">{option.packageLevel}</Badge>
               </div>
               <p className="mt-1 text-sm text-ink/56">{option.flightNumber} · {option.routeDetail}</p>
+              <p className="mt-1 text-xs font-medium text-ink/42">Source: {option.provider === "amadeus" ? "Amadeus" : "Partner search"}</p>
             </div>
           </div>
 
@@ -513,6 +532,9 @@ function FlightCard({ option, currency, selected, onSelect }: { option: FlightSe
             <CheckCircle2 size={16} aria-hidden />
             {selected ? "Selected" : "Select flight"}
           </Button>
+          <Button asChild variant="outline">
+            <a href={option.link} target="_blank" rel="noreferrer">View flight</a>
+          </Button>
         </div>
       </CardContent>
     </Card>
@@ -523,7 +545,13 @@ function HotelCard({ option, currency, selected, onSelect }: { option: HotelSear
   return (
     <Card className={selected ? "overflow-hidden border-reef ring-2 ring-reef/20" : "overflow-hidden"}>
       <CardContent className="grid gap-0 p-0 md:grid-cols-[300px_1fr]">
-        <div className="min-h-[230px] bg-cover bg-center md:min-h-full" style={{ backgroundImage: `url(${option.imageUrl})` }} aria-label={`${option.name} hotel image`} />
+        {option.imageUrl ? (
+          <div className="min-h-[230px] bg-cover bg-center md:min-h-full" style={{ backgroundImage: `url(${option.imageUrl})` }} aria-label={`${option.name} hotel image`} />
+        ) : (
+          <div className="flex min-h-[230px] items-center justify-center bg-ink/5 text-ink/42 md:min-h-full" aria-label={`${option.name} hotel image unavailable`}>
+            <Hotel size={42} aria-hidden />
+          </div>
+        )}
         <div className="grid gap-4 p-5">
           <div className="grid gap-4 lg:grid-cols-[1fr_190px]">
             <div>
@@ -536,14 +564,25 @@ function HotelCard({ option, currency, selected, onSelect }: { option: HotelSear
                 {option.location} · {option.distanceKm.toFixed(1)} km to center
               </p>
               <p className="mt-3 text-sm leading-6 text-ink/66">{option.description}</p>
+              <p className="mt-2 text-xs font-medium text-ink/42">Source: {option.source}</p>
             </div>
 
             <div className="rounded-lg bg-paper p-4 lg:text-right">
-              <p className="text-sm font-semibold text-ink">
-                {formatMoney(option.nightlyPrice, currency)} <span className="text-xs font-medium text-ink/48">/ night</span>
-              </p>
-              <p className="mt-1 text-2xl font-semibold">{formatMoney(option.totalPrice, currency)}</p>
-              <p className="text-xs text-ink/52">total before final taxes</p>
+              {option.hasKnownPrice ? (
+                <>
+                  <p className="text-sm font-semibold text-ink">
+                    {formatMoney(option.nightlyPrice, currency)} <span className="text-xs font-medium text-ink/48">/ night</span>
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold">{formatMoney(option.totalPrice, currency)}</p>
+                  <p className="text-xs text-ink/52">{option.priceSource === "live" ? "total before final taxes" : "planning estimate"}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/52">Live rates</p>
+                  <p className="mt-1 text-2xl font-semibold">Check rates</p>
+                  <p className="text-xs text-ink/52">Prices shown by partner</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -569,7 +608,7 @@ function HotelCard({ option, currency, selected, onSelect }: { option: HotelSear
             <p className="text-sm font-medium text-ink/62">{option.cancellationNote}</p>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
-                <a href={option.link} target="_blank" rel="noreferrer">View deal</a>
+                <a href={option.link} target="_blank" rel="noreferrer">View hotel</a>
               </Button>
               <Button variant={selected ? "outline" : "reef"} size="sm" onClick={onSelect}>
                 <CheckCircle2 size={16} aria-hidden />

@@ -28,7 +28,7 @@ export function SavedTrips() {
       setGuestCount(readSavedTrips().length);
       setTrips(await listSavedTrips());
     } catch {
-      setError("Saved trips could not be loaded. Trips saved on this device are still available.");
+      setError("Saved trips could not be loaded. Browser-saved trips are still available.");
       setTrips(readSavedTrips());
     }
   }
@@ -52,7 +52,7 @@ export function SavedTrips() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Saved plans</p>
-        <h1 className="mt-3 text-4xl font-semibold">{mode === "account" ? "Your Roamly library" : "Trips saved on this device"}</h1>
+        <h1 className="mt-3 text-4xl font-semibold">{mode === "account" ? "Your Roamly library" : "Saved trips"}</h1>
         </div>
         {mode === "account" && guestCount > 0 ? (
           <Button variant="reef" onClick={importLocalTrips}>
@@ -70,7 +70,7 @@ export function SavedTrips() {
             </span>
             <div>
               <h2 className="text-2xl font-semibold">No saved trips yet</h2>
-              <p className="mt-2 text-sm text-ink/60">Save a trip plan to return to hotels, flights, and itinerary details later.</p>
+              <p className="mt-2 text-sm text-ink/60">Save a generated itinerary to compare hotels, flights, and daily plans later.</p>
             </div>
             <Button asChild>
               <Link href="/">Start planning</Link>

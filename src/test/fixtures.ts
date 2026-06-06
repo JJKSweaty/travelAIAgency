@@ -44,8 +44,40 @@ export function createTripPlan(overrides: Partial<TripPlan> = {}): TripPlan {
       warnings: []
     },
     hotels: [
-      { id: "h-value", name: "Value Rooms", location: "Transit area", nightlyPrice: 90, rating: 4.1, source: "test", link: "https://example.com/value", confidence: 0.67 },
-      { id: "h", name: "Central House", location: "Center", nightlyPrice: 120, rating: 4.4, source: "test", link: "https://example.com/hotel", confidence: 0.7 }
+      {
+        id: "h-value",
+        name: "Hotel Mundial",
+        location: "Baixa",
+        nightlyPrice: 90,
+        rating: 4.2,
+        source: "Demo hotel catalog",
+        link: "https://example.com/value",
+        confidence: 0.67,
+        priceSource: "estimate",
+        starRating: 4,
+        reviewCount: 10400,
+        description: "Large central hotel near Rossio, tram routes, and Baixa restaurants.",
+        amenities: ["Free Wi-Fi", "Restaurant", "Breakfast available"],
+        cancellationNote: "Check cancellation terms on the partner site.",
+        distanceKm: 0.5
+      },
+      {
+        id: "h",
+        name: "Memmo Alfama",
+        location: "Alfama",
+        nightlyPrice: 120,
+        rating: 4.7,
+        source: "Demo hotel catalog",
+        link: "https://example.com/hotel",
+        confidence: 0.7,
+        priceSource: "estimate",
+        starRating: 4,
+        reviewCount: 1100,
+        description: "Boutique stay in Alfama with river-view spaces and walkable old-town access.",
+        amenities: ["Free Wi-Fi", "Bar", "Breakfast available"],
+        cancellationNote: "Check cancellation terms on the partner site.",
+        distanceKm: 0.9
+      }
     ],
     priceComparison: {
       flights: [
@@ -53,27 +85,52 @@ export function createTripPlan(overrides: Partial<TripPlan> = {}): TripPlan {
           id: "f",
           category: "flight",
           provider: "google-flights",
-          displayName: "Google Flights",
+          displayName: "Air Canada Main cabin",
           estimatedPrice: 420,
           unit: "round-trip",
           link: "https://example.com/flights",
           source: "fallback",
           confidence: 0.6,
           lastChecked: new Date().toISOString(),
-          linkLabel: "Exact flight search"
+          linkLabel: "View flight",
+          airline: "Air Canada",
+          airlineCode: "AC",
+          flightNumber: "AC 800",
+          departureAirport: "YYZ",
+          arrivalAirport: "LIS",
+          departureTime: "8:10 AM",
+          arrivalTime: "8:45 PM",
+          durationMinutes: 455,
+          stops: 0,
+          baggage: "Carry-on included",
+          fareType: "Main cabin",
+          refundableNote: "Check fare rules before booking"
         },
         {
           id: "f-premium",
           category: "flight",
           provider: "expedia",
-          displayName: "Expedia",
+          displayName: "TAP Air Portugal Flexible ticket",
           estimatedPrice: 760,
           unit: "round-trip",
           link: "https://example.com/expedia",
           source: "fallback",
           confidence: 0.55,
           lastChecked: new Date().toISOString(),
-          linkLabel: "Open provider search"
+          linkLabel: "View flight",
+          airline: "TAP Air Portugal",
+          airlineCode: "TP",
+          flightNumber: "TP 258",
+          departureAirport: "YYZ",
+          arrivalAirport: "LIS",
+          departureTime: "10:45 PM",
+          arrivalTime: "10:20 AM +1",
+          durationMinutes: 515,
+          stops: 1,
+          layoverCity: "OPO",
+          baggage: "Checked bag included",
+          fareType: "Flexible ticket",
+          refundableNote: "Changeable fare; check final rules"
         }
       ],
       hotels: [
@@ -111,7 +168,7 @@ export function createTripPlan(overrides: Partial<TripPlan> = {}): TripPlan {
             mode: "metro",
             durationMinutes: 20,
             summary: "Morning: Metro about 20 min",
-            from: "Central House",
+            from: "Hotel Mundial",
             to: "Arrive",
             mapLink: "https://example.com/maps"
           }

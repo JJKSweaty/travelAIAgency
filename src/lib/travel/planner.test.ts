@@ -34,8 +34,8 @@ describe("planTrip", () => {
 
   it("surfaces exact Google travel searches first when exact dates are provided", async () => {
     const plan = await planTrip({ ...request, dateMode: "exact", startDate: "2026-07-10", endDate: "2026-07-14", tripLengthDays: 5 });
-    expect(plan.priceComparison.flights[0]).toMatchObject({ provider: "google-flights", linkLabel: "Exact flight search" });
-    expect(plan.priceComparison.hotels[0]).toMatchObject({ provider: "google-hotels", linkLabel: "Exact hotel search" });
+    expect(plan.priceComparison.flights[0]).toMatchObject({ provider: "google-flights", linkLabel: "Open date-aware flight search" });
+    expect(plan.priceComparison.hotels[0]).toMatchObject({ provider: "demo-hotel-catalog", linkLabel: "View hotel" });
     expect(decodeURIComponent(plan.priceComparison.hotels[0].link)).toContain("check-in Jul 10, 2026");
   });
 

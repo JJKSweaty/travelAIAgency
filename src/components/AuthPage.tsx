@@ -148,7 +148,7 @@ export function AuthPage() {
             <Badge variant="coral" className="bg-coral text-white">
               Roamly account
             </Badge>
-            <h1 className="mt-5 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">Keep every trip ready when plans change.</h1>
+            <h1 className="mt-5 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">Save trips and compare options later.</h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-paper/78">
               Save your itineraries, revisit hotel and flight choices, and pick up planning from any device.
             </p>
@@ -179,7 +179,7 @@ export function AuthPage() {
             {!configured ? (
               <div className="rounded-lg border border-gold/30 bg-gold/10 p-4 text-sm text-ink/70">
                 <p className="font-semibold text-ink">Account sign-in is temporarily unavailable.</p>
-                <p className="mt-1">You can still plan trips and save them on this device.</p>
+                <p className="mt-1">You can still plan trips and return to them in this browser.</p>
               </div>
             ) : state.email ? (
               <div className="rounded-lg border border-reef/20 bg-reef/5 p-5">
@@ -245,8 +245,8 @@ export function AuthPage() {
         <Card>
           <CardContent className="grid gap-4 pt-5 sm:grid-cols-[1fr_auto] sm:items-center">
             <div>
-              <p className="text-sm font-semibold text-ink">Trips saved on this device</p>
-              <p className="mt-1 text-sm text-ink/60">You have {availableTripCount} trip{availableTripCount === 1 ? "" : "s"} available here.</p>
+              <p className="text-sm font-semibold text-ink">Available trips</p>
+              <p className="mt-1 text-sm text-ink/60">You have {availableTripCount} trip{availableTripCount === 1 ? "" : "s"} ready to continue.</p>
             </div>
             {configured && state.email && availableTripCount > 0 ? (
               <Button variant="reef" onClick={importLocalTrips}>

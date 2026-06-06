@@ -4,13 +4,17 @@ import { convertUsdFields, formatMoney, fromUsd, normalizeCurrency, toUsd } from
 import { buildDayTransitPlans } from "./transit";
 import {
   type AttractionProvider,
+  AmadeusTravelPriceProvider,
   type CarSearchProvider,
+  CascadingHotelSearchProvider,
+  CascadingTravelPriceProvider,
   FallbackAttractionProvider,
   FallbackCarSearchProvider,
   FallbackDestinationTrendProvider,
   FallbackHotelSearchProvider,
   FallbackRestaurantProvider,
   FallbackTravelPriceProvider,
+  GooglePlacesHotelSearchProvider,
   type HotelSearchProvider,
   type RestaurantProvider,
   type TravelPriceProvider
@@ -18,11 +22,11 @@ import {
 import type { RefinementIntent, TripPlan, TripRequest } from "./types";
 
 const destinationProvider = new FallbackDestinationTrendProvider();
-const hotelProvider: HotelSearchProvider = new FallbackHotelSearchProvider();
+const hotelProvider: HotelSearchProvider = new CascadingHotelSearchProvider(new GooglePlacesHotelSearchProvider(), new FallbackHotelSearchProvider());
 const carProvider: CarSearchProvider = new FallbackCarSearchProvider();
 const restaurantProvider: RestaurantProvider = new FallbackRestaurantProvider();
 const attractionProvider: AttractionProvider = new FallbackAttractionProvider();
-const travelPriceProvider: TravelPriceProvider = new FallbackTravelPriceProvider();
+const travelPriceProvider: TravelPriceProvider = new CascadingTravelPriceProvider(new AmadeusTravelPriceProvider(), new FallbackTravelPriceProvider());
 const itineraryGenerator = new OpenRouterItineraryGenerator();
 
 export async function planTrip(request: TripRequest): Promise<TripPlan> {
@@ -60,7 +64,7 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
         label: "Airbnb / private stay",
         location: `${destination.name} center`
       };
-  const displayHotels = recommendedHotels.map((hotel) => convertUsdFields(hotel, currency, ["nightlyPrice"]));
+  const displayHotels = recommendedHotels.map((hotel) => convertUsdFields(hotel, currency, ["nightlyPrice", "totalPrice"]));
   const selectedHotel = displayHotels[0]
     ? {
         id: displayHotels[0].id,
@@ -68,7 +72,15 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
         location: displayHotels[0].location,
         nightlyPrice: displayHotels[0].nightlyPrice,
         source: displayHotels[0].source,
-        link: displayHotels[0].link
+        link: displayHotels[0].link,
+        rating: displayHotels[0].rating,
+        reviewCount: displayHotels[0].reviewCount,
+        imageUrl: displayHotels[0].imageUrl,
+        starRating: displayHotels[0].starRating,
+        amenities: displayHotels[0].amenities,
+        cancellationNote: displayHotels[0].cancellationNote,
+        totalPrice: displayHotels[0].totalPrice,
+        priceSource: displayHotels[0].priceSource
       }
     : undefined;
   const displayCars = cars.data.sort((a, b) => a.dailyPrice - b.dailyPrice).map((car) => convertUsdFields(car, currency, ["dailyPrice"]));
@@ -112,6 +124,8 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
     },
     notes: [
       "Prices are planning estimates and should be verified before booking.",
+      ...(hotels.warnings ?? []),
+      ...(priceComparison.warnings ?? []),
       priceComparison.data[0].sourceNote,
       "Destination ranking considers budget fit, trip style, and current travel appeal.",
       ...(destinations.warnings ?? []),
@@ -134,14 +148,23 @@ function convertBudget(budget: ReturnType<typeof allocateBudget>, currency: Retu
 }
 
 function convertPriceComparison(priceComparison: TripPlan["priceComparison"], currency: ReturnType<typeof normalizeCurrency>) {
-  const flights = priceComparison.flights.map((quote) => ({ ...quote, estimatedPrice: fromUsd(quote.estimatedPrice, currency) }));
-  const hotels = priceComparison.hotels.map((quote) => ({ ...quote, estimatedPrice: fromUsd(quote.estimatedPrice, currency) }));
+  const flights = priceComparison.flights.map((quote) => ({
+    ...quote,
+    estimatedPrice: fromUsd(quote.estimatedPrice, currency),
+    pricePerTraveler: quote.pricePerTraveler ? fromUsd(quote.pricePerTraveler, currency) : undefined,
+    totalPrice: quote.totalPrice ? fromUsd(quote.totalPrice, currency) : undefined
+  }));
+  const hotels = priceComparison.hotels.map((quote) => ({
+    ...quote,
+    estimatedPrice: fromUsd(quote.estimatedPrice, currency),
+    totalPrice: quote.totalPrice ? fromUsd(quote.totalPrice, currency) : undefined
+  }));
   return {
     ...priceComparison,
     flights,
     hotels,
-    lowestFlight: priceComparison.lowestFlight ? { ...priceComparison.lowestFlight, estimatedPrice: fromUsd(priceComparison.lowestFlight.estimatedPrice, currency) } : undefined,
-    lowestHotel: priceComparison.lowestHotel ? { ...priceComparison.lowestHotel, estimatedPrice: fromUsd(priceComparison.lowestHotel.estimatedPrice, currency) } : undefined
+    lowestFlight: priceComparison.lowestFlight ? flights.find((quote) => quote.id === priceComparison.lowestFlight?.id) : undefined,
+    lowestHotel: priceComparison.lowestHotel ? hotels.find((quote) => quote.id === priceComparison.lowestHotel?.id) : undefined
   };
 }
 
@@ -228,8 +251,9 @@ export function providerHealth() {
     configuredProviders: {
       destinations: process.env.TRAVEL_TRENDS_API_KEY ? "live-ready" : "fallback",
       locations: "open-meteo-geocoding",
-      hotels: process.env.HOTELS_API_KEY ? "live-ready" : "fallback",
-      priceComparison: process.env.TRAVEL_PRICE_API_KEY ? "live-ready" : "fallback",
+      hotels: process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY ? "google-places-ready" : "demo-catalog",
+      flights: process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET ? "amadeus-ready" : "fallback",
+      priceComparison: process.env.TRAVEL_PRICE_API_KEY || (process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET) ? "live-ready" : "fallback",
       cars: process.env.CARS_API_KEY ? "live-ready" : "fallback",
       restaurants: process.env.RESTAURANTS_API_KEY ? "live-ready" : "fallback",
       attractions: process.env.ATTRACTIONS_API_KEY ? "live-ready" : "fallback",

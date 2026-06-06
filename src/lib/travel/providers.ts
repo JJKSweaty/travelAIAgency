@@ -9,6 +9,7 @@ import type {
   Interest,
   ItineraryDay,
   PriceComparison,
+  PriceQuote,
   ProviderResult,
   RestaurantOption,
   TripRequest
@@ -120,7 +121,99 @@ export function suggestDestinations(query: string, limit = 8): DestinationOption
 
 export class FallbackHotelSearchProvider implements HotelSearchProvider {
   async searchHotels(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<HotelOption>> {
-    return { data: hotelsFor(destination, request), source: "fallback", providerName: "Fallback hotel index", confidence: 0.7 };
+    return { data: hotelsFor(destination, request), source: "fallback", providerName: "Demo hotel catalog", confidence: 0.62 };
+  }
+}
+
+export class GooglePlacesHotelSearchProvider implements HotelSearchProvider {
+  async searchHotels(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<HotelOption>> {
+    const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey) return { data: [], source: "fallback", providerName: "Google Places", confidence: 0, warnings: ["Google Places is not configured."] };
+
+    try {
+      const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask":
+            "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.googleMapsUri,places.websiteUri,places.photos,places.types,places.priceLevel,places.editorialSummary"
+        },
+        body: JSON.stringify({
+          textQuery: `hotels in ${destinationLabel(destination)}`,
+          includedType: "lodging",
+          pageSize: 6,
+          languageCode: "en"
+        })
+      });
+
+      if (!response.ok) throw new Error(`Google Places returned ${response.status}`);
+      const payload = (await response.json()) as GooglePlacesTextSearchResponse;
+      const places = payload.places ?? [];
+      const hotels = await Promise.all(
+        places.slice(0, 5).map(async (place, index): Promise<HotelOption | null> => {
+          const imageUrl = place.photos?.[0]?.name ? await googlePlacePhotoUrl(place.photos[0].name, apiKey) : undefined;
+          const name = place.displayName?.text?.trim();
+          if (!name) return null;
+          const nightlyPrice = Math.round(destination.averageNightlyHotel * googlePriceFactor(place.priceLevel, index));
+          return {
+            id: place.id ? `google-places-${place.id}` : `${destination.id}-google-place-${index + 1}`,
+            name,
+            location: place.formattedAddress ?? destination.name,
+            nightlyPrice,
+            rating: typeof place.rating === "number" ? place.rating : 0,
+            source: "Google Places",
+            link: place.websiteUri ?? place.googleMapsUri ?? `https://www.google.com/travel/hotels?q=${encodeURIComponent(`${name} ${destinationLabel(destination)}`)}`,
+            confidence: 0.82,
+            priceSource: "unavailable" as const,
+            imageUrl,
+            reviewCount: place.userRatingCount,
+            description: place.editorialSummary?.text ?? "Real hotel result from Google Places. Open the partner page to check live room rates and availability.",
+            amenities: googleHotelAmenities(place.types),
+            cancellationNote: "Rates and cancellation terms are shown on the partner site.",
+            totalPrice: undefined,
+            distanceKm: index === 0 ? 0.6 : 0.9 + index * 0.55,
+            bookingLinkLabel: "View hotel",
+            placeId: place.id,
+            photoAttributions: place.photos?.[0]?.authorAttributions?.flatMap((item) => (item.displayName ? [item.displayName] : []))
+          } satisfies HotelOption;
+        })
+      );
+      const data = hotels.filter((hotel): hotel is HotelOption => Boolean(hotel));
+
+      return {
+        data,
+        source: "live",
+        providerName: "Google Places",
+        confidence: data.length ? 0.82 : 0.2,
+        warnings: data.length ? undefined : ["No Google Places hotel results were returned for this destination."]
+      };
+    } catch {
+      return {
+        data: [],
+        source: "fallback",
+        providerName: "Google Places",
+        confidence: 0,
+        warnings: ["Google Places hotel search was unavailable, so Roamly used its configured fallback."]
+      };
+    }
+  }
+}
+
+export class CascadingHotelSearchProvider implements HotelSearchProvider {
+  constructor(
+    private readonly liveProvider: HotelSearchProvider,
+    private readonly fallbackProvider: HotelSearchProvider
+  ) {}
+
+  async searchHotels(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<HotelOption>> {
+    const live = await this.liveProvider.searchHotels(destination, request);
+    if (live.data.length) return live;
+    const fallback = await this.fallbackProvider.searchHotels(destination, request);
+    return {
+      ...fallback,
+      warnings: [...(live.warnings ?? []), ...(fallback.warnings ?? [])]
+    };
   }
 }
 
@@ -162,6 +255,91 @@ export class FallbackTravelPriceProvider implements TravelPriceProvider {
       source: "fallback",
       providerName: "Fallback travel price comparison",
       confidence: 0.58
+    };
+  }
+}
+
+export class AmadeusTravelPriceProvider implements TravelPriceProvider {
+  async comparePrices(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<PriceComparison>> {
+    const clientId = process.env.AMADEUS_CLIENT_ID;
+    const clientSecret = process.env.AMADEUS_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      return { data: [], source: "fallback", providerName: "Amadeus Flight Offers Search", confidence: 0, warnings: ["Amadeus is not configured."] };
+    }
+
+    const originCode = airportCodeFor(request.origin);
+    const destinationCode = airportCodeFor(destination.name) ?? airportCodeFor(destination.country);
+    const dates = searchDates(request);
+    if (!originCode || !destinationCode || !dates) {
+      return {
+        data: [],
+        source: "fallback",
+        providerName: "Amadeus Flight Offers Search",
+        confidence: 0,
+        warnings: ["Amadeus needs origin and destination airport codes plus usable travel dates."]
+      };
+    }
+
+    try {
+      const token = await amadeusAccessToken(clientId, clientSecret);
+      const baseUrl = process.env.AMADEUS_BASE_URL ?? "https://test.api.amadeus.com";
+      const url = new URL("/v2/shopping/flight-offers", baseUrl);
+      url.searchParams.set("originLocationCode", originCode);
+      url.searchParams.set("destinationLocationCode", destinationCode);
+      url.searchParams.set("departureDate", dates.departureDate);
+      url.searchParams.set("returnDate", dates.returnDate);
+      url.searchParams.set("adults", String(Math.max(1, request.travelers)));
+      url.searchParams.set("currencyCode", "USD");
+      url.searchParams.set("max", "8");
+
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) throw new Error(`Amadeus returned ${response.status}`);
+      const payload = (await response.json()) as AmadeusFlightOffersResponse;
+      const flights = (payload.data ?? []).map((offer, index) => amadeusOfferToQuote(offer, payload.dictionaries?.carriers ?? {}, request, destination, index)).filter((quote): quote is PriceQuote => Boolean(quote));
+      const hotels = hotelMarketQuotesFor(destination, request).sort((a, b) => a.estimatedPrice - b.estimatedPrice);
+
+      return {
+        data: [
+          {
+            flights,
+            hotels,
+            lowestFlight: [...flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0],
+            lowestHotel: hotels[0],
+            sourceNote: flights.length
+              ? "Flight prices and availability come from Amadeus Flight Offers Search. Hotel prices are shown only when a hotel pricing provider is configured."
+              : "Amadeus did not return flight offers for this route and date combination."
+          }
+        ],
+        source: flights.length ? "live" : "fallback",
+        providerName: "Amadeus Flight Offers Search",
+        confidence: flights.length ? 0.86 : 0.2,
+        warnings: flights.length ? undefined : ["No Amadeus flight offers were returned for this route and date combination."]
+      };
+    } catch {
+      return {
+        data: [],
+        source: "fallback",
+        providerName: "Amadeus Flight Offers Search",
+        confidence: 0,
+        warnings: ["Amadeus flight search was unavailable, so Roamly used its configured fallback."]
+      };
+    }
+  }
+}
+
+export class CascadingTravelPriceProvider implements TravelPriceProvider {
+  constructor(
+    private readonly liveProvider: TravelPriceProvider,
+    private readonly fallbackProvider: TravelPriceProvider
+  ) {}
+
+  async comparePrices(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<PriceComparison>> {
+    const live = await this.liveProvider.comparePrices(destination, request);
+    if (live.data[0]?.flights.length) return live;
+    const fallback = await this.fallbackProvider.comparePrices(destination, request);
+    return {
+      ...fallback,
+      warnings: [...(live.warnings ?? []), ...(fallback.warnings ?? [])]
     };
   }
 }
@@ -304,4 +482,260 @@ function customDestination(request: TripRequest): DestinationOption {
     averageDailyActivities: costLevel >= 5 ? 86 : costLevel === 4 ? 68 : costLevel === 3 ? 46 : 32,
     bookingLink: `https://www.google.com/travel/explore?q=${encodeURIComponent(parsed.label)}`
   };
+}
+
+type GooglePlacesTextSearchResponse = {
+  places?: {
+    id?: string;
+    displayName?: { text?: string };
+    formattedAddress?: string;
+    rating?: number;
+    userRatingCount?: number;
+    googleMapsUri?: string;
+    websiteUri?: string;
+    priceLevel?: string;
+    types?: string[];
+    editorialSummary?: { text?: string };
+    photos?: {
+      name?: string;
+      authorAttributions?: { displayName?: string }[];
+    }[];
+  }[];
+};
+
+type GooglePlacePhotoResponse = {
+  photoUri?: string;
+};
+
+async function googlePlacePhotoUrl(photoName: string, apiKey: string) {
+  const url = new URL(`https://places.googleapis.com/v1/${photoName}/media`);
+  url.searchParams.set("maxWidthPx", "900");
+  url.searchParams.set("skipHttpRedirect", "true");
+  const response = await fetch(url, { headers: { "X-Goog-Api-Key": apiKey } });
+  if (!response.ok) return undefined;
+  const payload = (await response.json()) as GooglePlacePhotoResponse;
+  return payload.photoUri;
+}
+
+function googlePriceFactor(priceLevel?: string, index = 0) {
+  const factors: Record<string, number> = {
+    PRICE_LEVEL_FREE: 0.75,
+    PRICE_LEVEL_INEXPENSIVE: 0.78,
+    PRICE_LEVEL_MODERATE: 1,
+    PRICE_LEVEL_EXPENSIVE: 1.25,
+    PRICE_LEVEL_VERY_EXPENSIVE: 1.55
+  };
+  return factors[priceLevel ?? ""] ?? [0.9, 1, 1.14, 1.28, 0.82][index % 5];
+}
+
+function googleHotelAmenities(types?: string[]) {
+  const values = new Set(["Real place listing", "Open partner rates"]);
+  if (types?.some((type) => /restaurant|food/i.test(type))) values.add("Restaurant nearby");
+  if (types?.some((type) => /spa/i.test(type))) values.add("Spa access");
+  values.add("Check availability");
+  return Array.from(values).slice(0, 4);
+}
+
+type AmadeusFlightOffersResponse = {
+  data?: AmadeusFlightOffer[];
+  dictionaries?: {
+    carriers?: Record<string, string>;
+  };
+};
+
+type AmadeusFlightOffer = {
+  id: string;
+  validatingAirlineCodes?: string[];
+  itineraries?: {
+    duration?: string;
+    segments?: {
+      carrierCode?: string;
+      number?: string;
+      departure?: { iataCode?: string; at?: string };
+      arrival?: { iataCode?: string; at?: string };
+      duration?: string;
+    }[];
+  }[];
+  price?: {
+    total?: string;
+    grandTotal?: string;
+    currency?: string;
+  };
+  pricingOptions?: {
+    fareType?: string[];
+    includedCheckedBagsOnly?: boolean;
+  };
+  travelerPricings?: {
+    fareOption?: string;
+    price?: { total?: string };
+    fareDetailsBySegment?: {
+      includedCheckedBags?: { quantity?: number; weight?: number; weightUnit?: string };
+      cabin?: string;
+      brandedFareLabel?: string;
+    }[];
+  }[];
+};
+
+async function amadeusAccessToken(clientId: string, clientSecret: string) {
+  const baseUrl = process.env.AMADEUS_BASE_URL ?? "https://test.api.amadeus.com";
+  const body = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: clientId,
+    client_secret: clientSecret
+  });
+  const response = await fetch(new URL("/v1/security/oauth2/token", baseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
+  if (!response.ok) throw new Error(`Amadeus token request returned ${response.status}`);
+  const payload = (await response.json()) as { access_token?: string };
+  if (!payload.access_token) throw new Error("Amadeus token response did not include an access token.");
+  return payload.access_token;
+}
+
+function amadeusOfferToQuote(
+  offer: AmadeusFlightOffer,
+  carriers: Record<string, string>,
+  request: TripRequest,
+  destination: DestinationOption,
+  index: number
+): PriceQuote | null {
+  const outbound = offer.itineraries?.[0];
+  const segments = outbound?.segments ?? [];
+  const first = segments[0];
+  const last = segments[segments.length - 1];
+  const carrierCode = first?.carrierCode ?? offer.validatingAirlineCodes?.[0];
+  const airline = carrierCode ? carriers[carrierCode] ?? carrierCode : "Airline";
+  const total = Number(offer.price?.grandTotal ?? offer.price?.total);
+  if (!Number.isFinite(total) || !first?.departure?.at || !last?.arrival?.at) return null;
+
+  const checkedBag = offer.travelerPricings?.[0]?.fareDetailsBySegment?.find((segment) => segment.includedCheckedBags)?.includedCheckedBags;
+  const fareType = offer.travelerPricings?.[0]?.fareDetailsBySegment?.[0]?.brandedFareLabel ?? offer.travelerPricings?.[0]?.fareOption ?? offer.pricingOptions?.fareType?.[0] ?? "Published fare";
+  const stops = Math.max(0, segments.length - 1);
+  const layoverCity = stops > 0 ? segments[0]?.arrival?.iataCode : undefined;
+
+  return {
+    id: `amadeus-flight-${offer.id || index + 1}`,
+    category: "flight",
+    provider: "amadeus",
+    displayName: `${airline} ${fareType}`,
+    estimatedPrice: Math.round(total),
+    unit: "round-trip",
+    link: googleFlightSearchLink(request, destination),
+    source: "live",
+    confidence: 0.86,
+    lastChecked: new Date().toISOString(),
+    linkLabel: "View flight",
+    priceSource: "live",
+    airline,
+    airlineCode: carrierCode,
+    flightNumber: carrierCode && first?.number ? `${carrierCode} ${first.number}` : undefined,
+    departureAirport: first.departure?.iataCode,
+    arrivalAirport: last.arrival?.iataCode,
+    departureTime: formatFlightTime(first.departure.at),
+    arrivalTime: formatFlightTime(last.arrival.at),
+    durationMinutes: parseIsoDuration(outbound?.duration) ?? segmentDurationMinutes(first.departure.at, last.arrival.at),
+    stops,
+    layoverCity,
+    baggage: checkedBag?.quantity ? `${checkedBag.quantity} checked bag${checkedBag.quantity === 1 ? "" : "s"} included` : offer.pricingOptions?.includedCheckedBagsOnly ? "Checked bag included" : "Baggage varies by fare",
+    fareType,
+    refundableNote: "Check fare rules before booking",
+    pricePerTraveler: Math.round(total / Math.max(1, request.travelers)),
+    totalPrice: Math.round(total)
+  };
+}
+
+function airportCodeFor(value?: string) {
+  if (!value) return undefined;
+  const normalized = value.trim().toLowerCase();
+  const codeMatch = /\b[A-Z]{3}\b/.exec(value);
+  if (codeMatch) return codeMatch[0];
+  const airportCodes: Record<string, string> = {
+    toronto: "YYZ",
+    lisbon: "LIS",
+    "mexico city": "MEX",
+    kyoto: "KIX",
+    tokyo: "TYO",
+    vancouver: "YVR",
+    "san diego": "SAN",
+    marrakesh: "RAK",
+    barcelona: "BCN",
+    seoul: "SEL",
+    singapore: "SIN",
+    "hong kong": "HKG",
+    london: "LON",
+    paris: "PAR",
+    rome: "ROM",
+    istanbul: "IST",
+    bangkok: "BKK",
+    "new orleans": "MSY",
+    "new york": "NYC",
+    "los angeles": "LAX",
+    miami: "MIA",
+    porto: "OPO",
+    prague: "PRG",
+    reykjavik: "KEF",
+    "cape town": "CPT",
+    "buenos aires": "BUE",
+    queenstown: "ZQN",
+    amsterdam: "AMS",
+    dubai: "DXB",
+    sydney: "SYD",
+    athens: "ATH",
+    "rio de janeiro": "RIO",
+    cartagena: "CTG"
+  };
+  return airportCodes[normalized] ?? airportCodes[normalized.split(",")[0]?.trim()];
+}
+
+function searchDates(request: TripRequest) {
+  if (request.dateMode === "exact" && isDateOnly(request.startDate)) {
+    return {
+      departureDate: request.startDate,
+      returnDate: isDateOnly(request.endDate) ? request.endDate : addDays(request.startDate, Math.max(1, request.tripLengthDays - 1))
+    };
+  }
+  const monthMatch = /^(\d{4})-(\d{2})$/.exec(request.startDate ?? "");
+  if (monthMatch) {
+    const [, year, month] = monthMatch;
+    const departureDate = `${year}-${month}-15`;
+    return { departureDate, returnDate: addDays(departureDate, Math.max(1, request.tripLengthDays - 1)) };
+  }
+  return null;
+}
+
+function googleFlightSearchLink(request: TripRequest, destination: DestinationOption) {
+  const query = `${request.origin} to ${destinationLabel(destination)} ${request.startDate ?? ""}`.trim();
+  return `https://www.google.com/travel/flights?q=${encodeURIComponent(query)}`;
+}
+
+function destinationLabel(destination: DestinationOption) {
+  return destination.country && destination.country !== "Global destination" ? `${destination.name}, ${destination.country}` : destination.name;
+}
+
+function formatFlightTime(value: string) {
+  return new Date(value).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function parseIsoDuration(value?: string) {
+  if (!value) return undefined;
+  const match = /^PT(?:(\d+)H)?(?:(\d+)M)?$/.exec(value);
+  if (!match) return undefined;
+  return Number(match[1] ?? 0) * 60 + Number(match[2] ?? 0);
+}
+
+function segmentDurationMinutes(start: string, end: string) {
+  return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
+}
+
+function addDays(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isDateOnly(value?: string): value is string {
+  return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 }

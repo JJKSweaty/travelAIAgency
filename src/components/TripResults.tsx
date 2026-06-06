@@ -108,11 +108,19 @@ export function TripResults() {
           ? {
               id: hotel.id,
               name: hotel.name,
-              location: hotel.location,
-              nightlyPrice: hotel.nightlyPrice,
-              source: hotel.source,
-              link: hotel.link
-            }
+                location: hotel.location,
+                nightlyPrice: hotel.nightlyPrice,
+                source: hotel.source,
+                link: hotel.link,
+                rating: hotel.rating,
+                reviewCount: hotel.reviewCount,
+                imageUrl: hotel.imageUrl,
+                starRating: hotel.starRating,
+                amenities: hotel.amenities,
+                cancellationNote: hotel.cancellationNote,
+                totalPrice: hotel.totalPrice,
+                priceSource: hotel.priceSource
+              }
           : plan.selectedHotel
       });
       return;
@@ -188,7 +196,7 @@ export function TripResults() {
               <p className="mt-2 text-xl text-paper/78">{plan.destination.country}</p>
               <p className="mt-6 max-w-2xl text-base leading-7 text-paper/80">{plan.destination.summary}</p>
               <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
-                <TravelActionCard href="/options/hotels" icon={<BedDouble size={18} />} title={lowestHotel ? `Stays from ${formatMoney(lowestHotel.nightlyPrice, currency)}/night` : "Review stay packages"} meta={plan.selectedHotel?.name ?? plan.selectedHotelQuote?.displayName ?? plan.selectedStay?.label ?? "Compare stays for this trip"} />
+                <TravelActionCard href="/options/hotels" icon={<BedDouble size={18} />} title={lowestHotel ? (lowestHotel.priceSource === "unavailable" ? "Hotels with partner rates" : `Stays from ${formatMoney(lowestHotel.nightlyPrice, currency)}/night`) : "Review stay options"} meta={plan.selectedHotel?.name ?? plan.selectedHotelQuote?.displayName ?? plan.selectedStay?.label ?? "Compare stays for this trip"} />
                 <TravelActionCard href="/options/flights" icon={<Plane size={18} />} title={lowestFlight ? `Flights from ${formatMoney(lowestFlight.estimatedPrice, currency)} round-trip` : "Review flight packages"} meta={plan.selectedFlightQuote?.displayName ?? "Compare cheaper, faster, and more comfortable packages"} />
               </div>
             </div>
@@ -383,7 +391,7 @@ function TravelActionCard({ href, icon, title, meta }: { href: string; icon: Rea
 function TripSummaryPanel({ plan }: { plan: TripPlan }) {
   const currency = plan.request.currency;
   const lowestFlight = [...plan.priceComparison.flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0];
-  const selectedHotelPrice = plan.selectedHotel ? `${formatMoney(plan.selectedHotel.nightlyPrice, currency)}/night` : "";
+  const selectedHotelPrice = plan.selectedHotel ? (plan.selectedHotel.priceSource === "unavailable" ? "check rates" : `${formatMoney(plan.selectedHotel.nightlyPrice, currency)}/night`) : "";
   const selectedFlightDetail = plan.selectedFlightQuote?.airline
     ? `${plan.selectedFlightQuote.airline} ${plan.selectedFlightQuote.departureTime ?? ""} to ${plan.selectedFlightQuote.arrivalTime ?? ""}`.trim()
     : "";
@@ -428,9 +436,10 @@ function TripCostPanel({ plan }: { plan: TripPlan }) {
   const localTransport = plan.cars[0] ? Math.round(plan.cars[0].dailyPrice * plan.request.tripLengthDays) : plan.budget.transport;
   const food = plan.budget.food;
   const activities = plan.budget.activities;
+  const hotelPriceKnown = plan.selectedHotel?.priceSource !== "unavailable";
   const rows = [
     { label: "Flight", value: selectedFlight, detail: plan.selectedFlightQuote ? plan.selectedFlightQuote.displayName : "Not selected yet" },
-    { label: "Hotel", value: lodging, detail: `${nights} night${nights === 1 ? "" : "s"} at ${formatMoney(selectedHotelNightly, currency)}/night` },
+    { label: "Hotel", value: hotelPriceKnown ? lodging : 0, detail: hotelPriceKnown ? `${nights} night${nights === 1 ? "" : "s"} at ${formatMoney(selectedHotelNightly, currency)}/night` : "Open the hotel page for live rates" },
     { label: "Local transport", value: localTransport, detail: plan.cars[0]?.name ?? "Transit and rideshare estimate" },
     { label: "Activities", value: activities, detail: "Itinerary activity estimate" },
     { label: "Food", value: food, detail: "Meals and casual dining estimate" }

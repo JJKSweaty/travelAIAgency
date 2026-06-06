@@ -34,13 +34,13 @@ describe("fallback travel links", () => {
     const flight = flightQuotesFor(destinations[0], exactRequest)[0];
     const hotels = hotelMarketQuotesFor(destinations[0], exactRequest);
     const googleHotel = hotels[0];
-    const booking = hotels[1];
+    const booking = hotels.find((quote) => quote.provider === "booking");
 
-    expect(flight.linkLabel).toBe("Exact flight search");
+    expect(flight.linkLabel).toBe("Open date-aware flight search");
     expect(decodeURIComponent(flight.link)).toContain("depart Jul 10, 2026 return Jul 14, 2026");
-    expect(googleHotel.linkLabel).toBe("Exact hotel search");
+    expect(googleHotel.linkLabel).toBe("View hotel");
     expect(decodeURIComponent(googleHotel.link)).toContain("check-in Jul 10, 2026 check-out Jul 14, 2026");
-    expect(booking.link).toContain("checkin=2026-07-10");
-    expect(booking.link).toContain("checkout=2026-07-14");
+    expect(booking?.link).toContain("checkin=2026-07-10");
+    expect(booking?.link).toContain("checkout=2026-07-14");
   });
 });

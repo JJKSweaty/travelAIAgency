@@ -25,8 +25,8 @@ describe("TravelOptionsPage", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: /choose your stay/i })).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /^budget$/i }));
 
-    expect(screen.getByText("Value Rooms")).toBeInTheDocument();
-    expect(screen.queryByText("Central House")).not.toBeInTheDocument();
+    expect(screen.getByText("Hotel Mundial")).toBeInTheDocument();
+    expect(screen.queryByText("Memmo Alfama")).not.toBeInTheDocument();
     expect(screen.queryByText("Booking.com")).not.toBeInTheDocument();
   });
 
@@ -37,13 +37,13 @@ describe("TravelOptionsPage", () => {
     window.localStorage.setItem("roamly.savedTrips", JSON.stringify([plan]));
     render(<TravelOptionsPage kind="hotels" />);
 
-    await waitFor(() => expect(screen.getByText("Central House")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Hotel Mundial")).toBeInTheDocument());
     await user.click(screen.getAllByRole("button", { name: /select stay/i })[0]);
 
     await waitFor(() => {
       const current = JSON.parse(window.sessionStorage.getItem("roamly.currentTrip") ?? "{}");
       expect(current.selectedHotel.id).toBe("h");
-      expect(current.selectedStay.label).toBe("Central House");
+      expect(current.selectedStay.label).toBe("Memmo Alfama");
       expect(current.selectedHotel.totalPrice).toBe(240);
       expect(current.budget.totalEstimated).toBe(1660);
     });

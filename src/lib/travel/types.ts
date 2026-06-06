@@ -94,6 +94,18 @@ export type HotelOption = {
   source: string;
   link: string;
   confidence: number;
+  priceSource?: "live" | "estimate" | "unavailable";
+  imageUrl?: string;
+  starRating?: number;
+  reviewCount?: number;
+  description?: string;
+  amenities?: string[];
+  cancellationNote?: string;
+  totalPrice?: number;
+  distanceKm?: number;
+  bookingLinkLabel?: string;
+  placeId?: string;
+  photoAttributions?: string[];
 };
 
 export type CarOption = {
@@ -142,6 +154,22 @@ export type PriceQuote = {
   confidence: number;
   lastChecked: string;
   linkLabel?: string;
+  priceSource?: "live" | "estimate" | "unavailable";
+  airline?: string;
+  airlineCode?: string;
+  flightNumber?: string;
+  departureAirport?: string;
+  arrivalAirport?: string;
+  departureTime?: string;
+  arrivalTime?: string;
+  durationMinutes?: number;
+  stops?: number;
+  layoverCity?: string;
+  baggage?: string;
+  fareType?: string;
+  refundableNote?: string;
+  pricePerTraveler?: number;
+  totalPrice?: number;
 };
 
 export type PriceComparison = {
@@ -205,6 +233,7 @@ export type SelectedHotelOption = {
   amenities?: string[];
   cancellationNote?: string;
   totalPrice?: number;
+  priceSource?: HotelOption["priceSource"];
 };
 
 export type SelectedQuoteOption = {

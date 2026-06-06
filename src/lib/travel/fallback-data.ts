@@ -452,53 +452,41 @@ export const destinations: DestinationOption[] = [
 ];
 
 export function hotelsFor(destination: DestinationOption, request?: TripRequest): HotelOption[] {
-  const destinationText = destinationLabel(destination);
-  const searchText = hotelSearchText(destination, request);
-  return [
-    {
-      id: `${destination.id}-hotel-1`,
-      name: `${destination.name} Central House`,
-      location: `Central ${destination.name}`,
-      nightlyPrice: Math.round(destination.averageNightlyHotel * 0.92),
-      rating: 4.4,
-      source: "Fallback hotel index",
-      link: `https://www.google.com/travel/hotels?q=${encodeURIComponent(searchText)}`,
-      confidence: 0.72
-    },
-    {
-      id: `${destination.id}-hotel-2`,
-      name: `${destination.name} Design Stay`,
-      location: "Dining district",
-      nightlyPrice: Math.round(destination.averageNightlyHotel * 1.18),
-      rating: 4.6,
-      source: "Fallback hotel index",
-      link: bookingHotelLink(destinationText, request),
-      confidence: 0.7
-    },
-    {
-      id: `${destination.id}-hotel-3`,
-      name: `${destination.name} Value Rooms`,
-      location: "Transit-friendly area",
-      nightlyPrice: Math.round(destination.averageNightlyHotel * 0.72),
-      rating: 4.1,
-      source: "Fallback hotel index",
-      link: `https://www.google.com/search?q=${encodeURIComponent(`${searchText} budget hotels`)}`,
-      confidence: 0.67
-    }
-  ];
+  const seeds = curatedHotels[destination.id] ?? [];
+  return seeds.map((seed, index) => {
+    const nightlyPrice = Math.round(destination.averageNightlyHotel * seed.priceFactor);
+    const bookingSearch = `${seed.name} ${hotelSearchText(destination, request)}`;
+    return {
+      id: `${destination.id}-hotel-${index + 1}`,
+      name: seed.name,
+      location: seed.location,
+      nightlyPrice,
+      rating: seed.rating,
+      source: "Demo hotel catalog",
+      link: seed.link ?? `https://www.google.com/travel/hotels?q=${encodeURIComponent(bookingSearch)}`,
+      confidence: 0.62,
+      priceSource: "estimate",
+      starRating: seed.starRating,
+      reviewCount: seed.reviewCount,
+      description: seed.description,
+      amenities: seed.amenities,
+      cancellationNote: "Check cancellation terms on the partner site.",
+      totalPrice: request ? nightlyPrice * Math.max(1, request.tripLengthDays - 1) : undefined,
+      distanceKm: seed.distanceKm,
+      bookingLinkLabel: "View hotel"
+    };
+  });
 }
 
 export function flightQuotesFor(destination: DestinationOption, request: TripRequest): PriceQuote[] {
   const route = flightSearchText(destination, request);
   const base = Math.round((destination.costLevel * 115 + destination.trendingScore * 2.4) * request.travelers);
-  const providers = [
-    { provider: "google-flights", displayName: "Google Flights", factor: 0.96, link: `https://www.google.com/travel/flights?q=${encodeURIComponent(route)}`, linkLabel: "Exact flight search" },
-    { provider: "kayak", displayName: "KAYAK", factor: 1.02, link: `https://www.kayak.com/flights`, linkLabel: "Open provider search" },
-    { provider: "expedia", displayName: "Expedia", factor: 1.08, link: `https://www.expedia.com/Flights`, linkLabel: "Open provider search" },
-    { provider: "skyscanner", displayName: "Skyscanner", factor: 0.99, link: `https://www.skyscanner.com/transport/flights/`, linkLabel: "Open provider search" }
+  const links = [
+    { provider: "google-flights", displayName: "Date-aware flight search", factor: 0.96, link: `https://www.google.com/travel/flights?q=${encodeURIComponent(route)}`, linkLabel: hasExactDates(request) ? "Open date-aware flight search" : "Open flight search" },
+    { provider: "kayak", displayName: "Flexible fare search", factor: 1.02, link: `https://www.kayak.com/flights`, linkLabel: "Open flight search" }
   ];
 
-  return providers.map((item) => ({
+  return links.map((item) => ({
     id: `${destination.id}-flight-${item.provider}`,
     category: "flight",
     provider: item.provider,
@@ -509,34 +497,80 @@ export function flightQuotesFor(destination: DestinationOption, request: TripReq
     source: "fallback",
     confidence: 0.58,
     lastChecked: new Date().toISOString(),
-    linkLabel: item.linkLabel
+    linkLabel: item.linkLabel,
+    priceSource: "estimate"
   }));
 }
 
 export function hotelMarketQuotesFor(destination: DestinationOption, request?: TripRequest): PriceQuote[] {
   const destinationText = destinationLabel(destination);
   const searchText = hotelSearchText(destination, request);
-  const providers = [
-    { provider: "google-hotels", displayName: "Google Hotels", factor: 0.97, link: `https://www.google.com/travel/hotels?q=${encodeURIComponent(searchText)}`, linkLabel: "Exact hotel search" },
-    { provider: "booking", displayName: "Booking.com", factor: 1.03, link: bookingHotelLink(destinationText, request), linkLabel: hasExactDates(request) ? "Exact hotel search" : "Open hotel search" },
-    { provider: "expedia", displayName: "Expedia", factor: 1.07, link: `https://www.expedia.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}`, linkLabel: "Open provider search" },
-    { provider: "hotels", displayName: "Hotels.com", factor: 1.01, link: `https://www.hotels.com/Hotel-Search?destination=${encodeURIComponent(destinationText)}`, linkLabel: "Open provider search" },
-    { provider: "tripadvisor", displayName: "Tripadvisor", factor: 0.94, link: `https://www.tripadvisor.com/Search?q=${encodeURIComponent(searchText)}`, linkLabel: "Open hotel search" }
-  ];
+  const curated = hotelsFor(destination, request).slice(0, 3);
 
-  return providers.map((item) => ({
-    id: `${destination.id}-hotel-market-${item.provider}`,
-    category: "hotel",
-    provider: item.provider,
-    displayName: item.displayName,
-    estimatedPrice: Math.max(55, Math.round(destination.averageNightlyHotel * item.factor)),
-    unit: "night",
-    link: item.link,
-    source: "fallback",
-    confidence: 0.6,
-    lastChecked: new Date().toISOString(),
-    linkLabel: item.linkLabel
-  }));
+  if (curated.length) {
+    const curatedQuotes: PriceQuote[] = curated.map((hotel) => ({
+      id: `${hotel.id}-market`,
+      category: "hotel",
+      provider: hotel.source.toLowerCase().replace(/\s+/g, "-"),
+      displayName: hotel.name,
+      estimatedPrice: hotel.nightlyPrice,
+      unit: "night",
+      link: hotel.link,
+      source: "fallback",
+      confidence: hotel.confidence,
+      lastChecked: new Date().toISOString(),
+      linkLabel: hotel.bookingLinkLabel ?? "View hotel",
+      priceSource: hotel.priceSource
+    }));
+    return [
+      ...curatedQuotes,
+      {
+        id: `${destination.id}-hotel-market-booking-search`,
+        category: "hotel",
+        provider: "booking",
+        displayName: "Partner hotel search",
+        estimatedPrice: Math.max(55, Math.round(destination.averageNightlyHotel * 1.03)),
+        unit: "night",
+        link: bookingHotelLink(destinationText, request),
+        source: "fallback",
+        confidence: 0.45,
+        lastChecked: new Date().toISOString(),
+        linkLabel: hasExactDates(request) ? "Open date-aware hotel search" : "Open hotel search",
+        priceSource: "estimate"
+      }
+    ];
+  }
+
+  return [
+    {
+      id: `${destination.id}-hotel-market-google-search`,
+      category: "hotel",
+      provider: "google-hotels",
+      displayName: "Hotel search",
+      estimatedPrice: Math.max(55, Math.round(destination.averageNightlyHotel)),
+      unit: "night",
+      link: `https://www.google.com/travel/hotels?q=${encodeURIComponent(searchText)}`,
+      source: "fallback",
+      confidence: 0.45,
+      lastChecked: new Date().toISOString(),
+      linkLabel: hasExactDates(request) ? "Open date-aware hotel search" : "Open hotel search",
+      priceSource: "estimate"
+    },
+    {
+      id: `${destination.id}-hotel-market-booking-search`,
+      category: "hotel",
+      provider: "booking",
+      displayName: "Partner hotel search",
+      estimatedPrice: Math.max(55, Math.round(destination.averageNightlyHotel * 1.03)),
+      unit: "night",
+      link: bookingHotelLink(destinationText, request),
+      source: "fallback",
+      confidence: 0.45,
+      lastChecked: new Date().toISOString(),
+      linkLabel: hasExactDates(request) ? "Open date-aware hotel search" : "Open hotel search",
+      priceSource: "estimate"
+    }
+  ];
 }
 
 export function carsFor(destination: DestinationOption): CarOption[] {
@@ -594,6 +628,162 @@ export function attractionsFor(destination: DestinationOption): AttractionOption
     confidence: 0.66
   }));
 }
+
+type CuratedHotelSeed = {
+  name: string;
+  location: string;
+  rating: number;
+  starRating: number;
+  reviewCount: number;
+  priceFactor: number;
+  distanceKm: number;
+  description: string;
+  amenities: string[];
+  link?: string;
+};
+
+const curatedHotels: Record<string, CuratedHotelSeed[]> = {
+  lisbon: [
+    {
+      name: "Hotel Mundial",
+      location: "Baixa / Praca Martim Moniz",
+      rating: 4.2,
+      starRating: 4,
+      reviewCount: 10400,
+      priceFactor: 0.98,
+      distanceKm: 0.5,
+      description: "Large central hotel near Rossio, tram routes, and Baixa restaurants.",
+      amenities: ["Free Wi-Fi", "Restaurant", "Rooftop bar", "Breakfast available"]
+    },
+    {
+      name: "Memmo Alfama",
+      location: "Alfama",
+      rating: 4.7,
+      starRating: 4,
+      reviewCount: 1100,
+      priceFactor: 1.35,
+      distanceKm: 0.9,
+      description: "Boutique stay in Alfama with river-view spaces and walkable old-town access.",
+      amenities: ["Free Wi-Fi", "Outdoor pool", "Bar", "Breakfast available"]
+    },
+    {
+      name: "The Editory Riverside Santa Apolonia Hotel",
+      location: "Santa Apolonia",
+      rating: 4.5,
+      starRating: 5,
+      reviewCount: 1700,
+      priceFactor: 1.12,
+      distanceKm: 1.4,
+      description: "Station-adjacent hotel with river access and easy connections across Lisbon.",
+      amenities: ["Free Wi-Fi", "Restaurant", "Near transit", "Fitness center"]
+    }
+  ],
+  "mexico-city": [
+    {
+      name: "Zocalo Central Mexico City",
+      location: "Centro Historico",
+      rating: 4.7,
+      starRating: 4,
+      reviewCount: 3600,
+      priceFactor: 1.15,
+      distanceKm: 0.2,
+      description: "Historic-center hotel close to the Zocalo, museums, and rooftop dining.",
+      amenities: ["Free Wi-Fi", "Breakfast included", "Restaurant", "Fitness center"]
+    },
+    {
+      name: "Hotel Geneve Ciudad de Mexico",
+      location: "Zona Rosa",
+      rating: 4.4,
+      starRating: 5,
+      reviewCount: 4200,
+      priceFactor: 1.08,
+      distanceKm: 3.1,
+      description: "Landmark hotel near Reforma with classic interiors and central nightlife access.",
+      amenities: ["Free Wi-Fi", "Restaurant", "Bar", "Spa access"]
+    },
+    {
+      name: "Kali Centro Mexico City",
+      location: "Centro / Doctores",
+      rating: 4.3,
+      starRating: 4,
+      reviewCount: 1900,
+      priceFactor: 0.78,
+      distanceKm: 1.6,
+      description: "Value-oriented base with simple rooms and quick access to the historic core.",
+      amenities: ["Free Wi-Fi", "Parking", "Breakfast available", "24-hour front desk"]
+    }
+  ],
+  tokyo: [
+    {
+      name: "Hotel Metropolitan Tokyo Marunouchi",
+      location: "Marunouchi / Tokyo Station",
+      rating: 4.5,
+      starRating: 4,
+      reviewCount: 2600,
+      priceFactor: 1.18,
+      distanceKm: 0.8,
+      description: "Station-connected business hotel with strong rail access for city exploring.",
+      amenities: ["Free Wi-Fi", "Restaurant", "Near transit", "Laundry"]
+    },
+    {
+      name: "Nohga Hotel Ueno Tokyo",
+      location: "Ueno",
+      rating: 4.6,
+      starRating: 4,
+      reviewCount: 2100,
+      priceFactor: 0.94,
+      distanceKm: 4.2,
+      description: "Design-forward stay near Ueno Park, museums, and neighborhood dining.",
+      amenities: ["Free Wi-Fi", "Restaurant", "Fitness center", "Breakfast available"]
+    },
+    {
+      name: "Hotel Gracery Shinjuku",
+      location: "Shinjuku",
+      rating: 4.3,
+      starRating: 4,
+      reviewCount: 9800,
+      priceFactor: 1.02,
+      distanceKm: 6.0,
+      description: "Large Shinjuku hotel close to nightlife, rail lines, and late dining.",
+      amenities: ["Free Wi-Fi", "Restaurant", "24-hour front desk", "Laundry"]
+    }
+  ],
+  paris: [
+    {
+      name: "Hotel Le Six",
+      location: "Saint-Germain / Montparnasse",
+      rating: 4.7,
+      starRating: 4,
+      reviewCount: 1800,
+      priceFactor: 1.05,
+      distanceKm: 2.1,
+      description: "Polished Left Bank stay near cafes, gardens, and metro connections.",
+      amenities: ["Free Wi-Fi", "Bar", "Spa access", "Breakfast available"]
+    },
+    {
+      name: "Hotel Fabric",
+      location: "Oberkampf",
+      rating: 4.7,
+      starRating: 4,
+      reviewCount: 1300,
+      priceFactor: 0.92,
+      distanceKm: 2.5,
+      description: "Boutique hotel in a restaurant-heavy neighborhood with easy metro access.",
+      amenities: ["Free Wi-Fi", "Fitness center", "Breakfast available", "Bar"]
+    },
+    {
+      name: "Pullman Paris Tour Eiffel",
+      location: "Eiffel Tower / Grenelle",
+      rating: 4.3,
+      starRating: 4,
+      reviewCount: 7600,
+      priceFactor: 1.32,
+      distanceKm: 4.0,
+      description: "Larger full-service hotel near the Eiffel Tower and Seine-side walks.",
+      amenities: ["Free Wi-Fi", "Restaurant", "Fitness center", "Room service"]
+    }
+  ]
+};
 
 function flightSearchText(destination: DestinationOption, request: TripRequest) {
   return [`from ${request.origin} to ${destinationLabel(destination)}`, travelDateLabel(request, "flight")].filter(Boolean).join(" ");
