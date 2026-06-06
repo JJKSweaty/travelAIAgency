@@ -193,9 +193,14 @@ export function providerHealth() {
       cars: process.env.CARS_API_KEY ? "live-ready" : "fallback",
       restaurants: process.env.RESTAURANTS_API_KEY ? "live-ready" : "fallback",
       attractions: process.env.ATTRACTIONS_API_KEY ? "live-ready" : "fallback",
+      supabase: isSupabaseEnvConfigured() ? "configured" : "guest-mode",
       ai: isOpenRouterConfigured() ? "openrouter-ready" : "fallback",
       aiModel: process.env.OPENROUTER_MODEL ?? "nvidia/nemotron-3.5-content-safety:free"
     },
     fallbackAvailable: true
   };
+}
+
+function isSupabaseEnvConfigured() {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && (process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY));
 }

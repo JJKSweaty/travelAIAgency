@@ -30,8 +30,10 @@ Roamly works in guest mode without Supabase. To enable login and account-saved t
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
+
+The modern Supabase publishable key (`sb_publishable_...`) replaces the legacy anon key for browser/client-side code. Do not put a Supabase secret key (`sb_secret_...`) in a `NEXT_PUBLIC_` variable.
 
 Run this SQL in Supabase:
 

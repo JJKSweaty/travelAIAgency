@@ -18,9 +18,12 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    const current = readCurrentTrip();
-    setPlan(current);
-    if (current) void isTripSaved(current.id).then(setSaved);
+    const task = window.setTimeout(() => {
+      const current = readCurrentTrip();
+      setPlan(current);
+      if (current) void isTripSaved(current.id).then(setSaved);
+    }, 0);
+    return () => window.clearTimeout(task);
   }, []);
 
   const currency = plan?.request.currency;
@@ -34,12 +37,15 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
 
   useEffect(() => {
     if (!plan || budget > 0) return;
-    if (kind === "hotels") {
-      const nights = Math.max(1, plan.request.tripLengthDays - 1);
-      setBudget(Math.max(fallbackBudget, Math.round(plan.budget.lodging / nights)));
-    } else {
-      setBudget(Math.max(fallbackBudget, plan.budget.transport));
-    }
+    const task = window.setTimeout(() => {
+      if (kind === "hotels") {
+        const nights = Math.max(1, plan.request.tripLengthDays - 1);
+        setBudget(Math.max(fallbackBudget, Math.round(plan.budget.lodging / nights)));
+      } else {
+        setBudget(Math.max(fallbackBudget, plan.budget.transport));
+      }
+    }, 0);
+    return () => window.clearTimeout(task);
   }, [budget, fallbackBudget, kind, plan]);
 
   function persist(next: TripPlan) {
@@ -235,7 +241,7 @@ function QuoteCard({ quote, selected, currency, compact = false, onSelect }: { q
 function EmptyBudgetMessage({ label, budget, currency }: { label: string; budget: number; currency: TripPlan["request"]["currency"] }) {
   return (
     <div className="rounded-lg border border-ink/10 bg-white p-5 text-sm text-ink/62">
-      No {label} are currently under {formatMoney(budget, currency)}. Raise the budget filter or keep Roamly's starting estimate.
+      No {label} are currently under {formatMoney(budget, currency)}. Raise the budget filter or keep Roamly&apos;s starting estimate.
     </div>
   );
 }

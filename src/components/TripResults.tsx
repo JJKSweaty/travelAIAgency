@@ -9,7 +9,7 @@ import { PriceComparisonChart } from "@/components/PriceComparisonChart";
 import { isTripSaved, readCurrentTrip, saveTrip, updateSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
 import { buildTransitPlan } from "@/lib/travel/transit";
 import { formatMoney } from "@/lib/travel/currency";
-import type { ItineraryAddition, ItineraryAdditionCategory, RefinementIntent, TripPlan, TripStaySelection } from "@/lib/travel/types";
+import type { ItineraryAddition, ItineraryAdditionCategory, ItineraryDay, RefinementIntent, TripPlan, TripStaySelection } from "@/lib/travel/types";
 
 const refinements: { intent: RefinementIntent; label: string }[] = [
   { intent: "cheaper", label: "Cheaper" },
@@ -92,6 +92,7 @@ export function TripResults() {
   const currency = plan.request.currency;
   const lowestHotel = [...plan.hotels].sort((a, b) => a.nightlyPrice - b.nightlyPrice)[0];
   const lowestFlight = [...plan.priceComparison.flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0];
+  const itineraryGroups = groupItineraryDays(plan.itinerary);
 
   function setSelectedStay(stay: TripStaySelection) {
     if (!plan) return;
@@ -187,7 +188,20 @@ export function TripResults() {
                 <TravelActionCard href="/options/flights" icon={<Plane size={18} />} title={lowestFlight ? `Flights starting from ${formatMoney(lowestFlight.estimatedPrice, currency)} round-trip` : "Review flight options"} meta={plan.selectedFlightQuote?.displayName ?? "Select a provider search or keep the default estimate"} />
               </div>
             </div>
-            <BudgetMeter budget={plan.budget} currency={currency} />
+            <BudgetMeter
+              budget={plan.budget}
+              currency={currency}
+              actions={[
+                {
+                  label: "Find cheaper plan",
+                  description: "Switches toward lower-cost destinations, transit, and value stays.",
+                  onClick: () => void refine("cheaper"),
+                  disabled: Boolean(isRefining)
+                },
+                { label: "Compare hotels", description: "Tune the nightly target and select the stay used for route planning.", href: "/options/hotels" },
+                { label: "Compare flights", description: "Open flight estimates and provider searches before booking.", href: "/options/flights" }
+              ]}
+            />
           </div>
         </div>
       </section>
@@ -251,94 +265,18 @@ export function TripResults() {
                 </div>
               </div>
 
-              {plan.itinerary.map((day) => (
-                <div key={day.day} className="grid gap-4 rounded-lg border border-ink/10 bg-white/76 p-4 sm:grid-cols-[94px_1fr]">
-                  <div className="sm:border-r sm:border-ink/10 sm:pr-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-reef">Day {day.day}</p>
-                    <p className="mt-2 text-lg font-semibold">{formatMoney(day.estimatedCost + (day.additions ?? []).reduce((sum, item) => sum + (item.estimatedCost ?? 0), 0), currency)}</p>
-                    <p className="text-xs text-ink/52">estimated day spend</p>
-                  </div>
-                  <div>
-                    <h3 className="font-semibold">{day.title}</h3>
-                    {day.theme ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.1em] text-ink/48">{day.theme}</p> : null}
-                    <div className="mt-3 grid gap-2">
-                      <ItinerarySegment icon={<Coffee size={15} />} label="Morning" text={day.morning} />
-                      <ItinerarySegment icon={<Sun size={15} />} label="Afternoon" text={day.afternoon} />
-                      <ItinerarySegment icon={<Moon size={15} />} label="Evening" text={day.evening} />
+              {itineraryGroups.map((group) => (
+                <div key={group.label} className="grid gap-3">
+                  <div className="flex flex-wrap items-end justify-between gap-2 border-b border-ink/10 pb-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-reef">{group.label}</p>
+                      <h3 className="mt-1 font-semibold">{group.title}</h3>
                     </div>
-                    {(day.transit ?? []).length ? (
-                      <div className="mt-3 flex flex-wrap gap-2 rounded-lg bg-reef/10 px-3 py-3 text-xs text-ink/64">
-                        <span className="font-semibold uppercase tracking-[0.12em] text-reef">Getting around</span>
-                        {(day.transit ?? []).map((transit) => (
-                          <a key={`${transit.from}-${transit.to}`} className="inline-flex items-center gap-1 rounded bg-white px-2 py-1 font-medium text-ink/68 hover:text-reef" href={transit.mapLink} target="_blank" rel="noreferrer">
-                            <Route size={13} aria-hidden />
-                            {transit.summary}
-                          </a>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div className="mt-3 rounded-lg border border-ink/10 bg-white p-3">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-reef">Add to day {day.day}</p>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_130px_120px_96px]">
-                        <input
-                          className="rounded-lg border border-ink/10 px-3 py-2 text-sm"
-                          placeholder="Add place, activity, or food stop"
-                          value={drafts[day.day]?.title ?? ""}
-                          onChange={(event) => updateDraft(day.day, { title: event.target.value })}
-                        />
-                        <select
-                          className="rounded-lg border border-ink/10 px-3 py-2 text-sm"
-                          value={drafts[day.day]?.category ?? "activity"}
-                          onChange={(event) => updateDraft(day.day, { category: event.target.value as ItineraryAdditionCategory })}
-                        >
-                          <option value="food">Food</option>
-                          <option value="activity">Activity</option>
-                          <option value="show">Show</option>
-                          <option value="shopping">Shopping</option>
-                          <option value="relaxation">Relaxation</option>
-                          <option value="custom">Custom</option>
-                        </select>
-                        <input
-                          className="rounded-lg border border-ink/10 px-3 py-2 text-sm"
-                          placeholder={`Cost (${currency ?? "USD"})`}
-                          type="number"
-                          min={0}
-                          value={drafts[day.day]?.estimatedCost ?? ""}
-                          onChange={(event) => updateDraft(day.day, { estimatedCost: event.target.value })}
-                        />
-                        <button className="inline-flex items-center justify-center gap-1 rounded-lg bg-reef px-3 py-2 text-sm font-semibold text-white" onClick={() => addDayItem(day.day)}>
-                          <Plus size={14} aria-hidden />
-                          Add
-                        </button>
-                      </div>
-
-                      {(day.additions ?? []).length > 0 ? (
-                        <div className="mt-3 grid gap-2">
-                          {(day.additions ?? []).map((item) => (
-                            <div key={item.id} className="rounded-lg bg-ink/5 px-3 py-3 text-sm">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span className="font-semibold">{item.title}</span>
-                                <span className="rounded bg-coral/10 px-2 py-0.5 text-xs font-medium capitalize text-coral">{item.category}</span>
-                                {item.estimatedCost ? <span className="text-xs text-ink/58">about {formatMoney(item.estimatedCost, currency)}</span> : null}
-                              </div>
-                              {item.transit ? (
-                                <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-ink/62">
-                                  <span className="inline-flex items-center gap-1">
-                                    <Route size={13} aria-hidden />
-                                    {item.transit.summary}
-                                  </span>
-                                  <a className="font-medium text-reef hover:underline" href={item.transit.mapLink} target="_blank" rel="noreferrer">
-                                    Open route
-                                  </a>
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
+                    <p className="text-sm font-semibold text-ink/62">{formatMoney(group.totalCost, currency)} planned</p>
                   </div>
+                  {group.days.map((day) => (
+                    <ItineraryDayCard key={day.day} day={day} currency={currency} drafts={drafts} updateDraft={updateDraft} addDayItem={addDayItem} />
+                  ))}
                 </div>
               ))}
             </div>
@@ -367,6 +305,10 @@ export function TripResults() {
                     <span className="flex items-center gap-2">
                       <Star size={15} aria-hidden />
                       {restaurant.rating.toFixed(1)} rating estimate
+                    </span>
+                    <span className="flex flex-wrap gap-2 text-xs font-medium">
+                      <span className="rounded bg-reef/10 px-2 py-1 text-reef">Planner estimate</span>
+                      <span className="rounded bg-ink/6 px-2 py-1 text-ink/58">{Math.round(restaurant.confidence * 100)}% confidence</span>
                     </span>
                   </span>
                 </a>
@@ -403,6 +345,10 @@ export function TripResults() {
                 <a key={destination.id} className="rounded-lg bg-white/70 p-3 transition hover:bg-white" href={destination.bookingLink} target="_blank" rel="noreferrer">
                   <span className="block font-semibold">{destination.name}</span>
                   <span className="mt-1 block text-sm text-ink/60">{destination.summary}</span>
+                  <span className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
+                    <span className="rounded bg-reef/10 px-2 py-1 text-reef">Planner estimate</span>
+                    <span className="rounded bg-ink/6 px-2 py-1 text-ink/58">{Math.round(destinationConfidence(destination.costLevel) * 100)}% confidence</span>
+                  </span>
                 </a>
               ))}
             </div>
@@ -493,6 +439,95 @@ function ItinerarySegment({ icon, label, text }: { icon: React.ReactNode; label:
   );
 }
 
+function ItineraryDayCard({
+  day,
+  currency,
+  drafts,
+  updateDraft,
+  addDayItem
+}: {
+  day: ItineraryDay;
+  currency: TripPlan["request"]["currency"];
+  drafts: Record<number, { title: string; category: ItineraryAdditionCategory; estimatedCost: string }>;
+  updateDraft: (day: number, patch: Partial<{ title: string; category: ItineraryAdditionCategory; estimatedCost: string }>) => void;
+  addDayItem: (day: number) => void;
+}) {
+  return (
+    <div className="grid gap-4 rounded-lg border border-ink/10 bg-white/76 p-4 sm:grid-cols-[94px_1fr]">
+      <div className="sm:border-r sm:border-ink/10 sm:pr-4">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-reef">Day {day.day}</p>
+        <p className="mt-2 text-lg font-semibold">{formatMoney(day.estimatedCost + (day.additions ?? []).reduce((sum, item) => sum + (item.estimatedCost ?? 0), 0), currency)}</p>
+        <p className="text-xs text-ink/52">estimated day spend</p>
+      </div>
+      <div>
+        <h3 className="font-semibold">{day.title}</h3>
+        {day.theme ? <p className="mt-1 text-xs font-medium uppercase tracking-[0.1em] text-ink/48">{day.theme}</p> : null}
+        <div className="mt-3 grid gap-2">
+          <ItinerarySegment icon={<Coffee size={15} />} label="Morning" text={day.morning} />
+          <ItinerarySegment icon={<Sun size={15} />} label="Afternoon" text={day.afternoon} />
+          <ItinerarySegment icon={<Moon size={15} />} label="Evening" text={day.evening} />
+        </div>
+        {(day.transit ?? []).length ? (
+          <div className="mt-3 flex flex-wrap gap-2 rounded-lg bg-reef/10 px-3 py-3 text-xs text-ink/64">
+            <span className="font-semibold uppercase tracking-[0.12em] text-reef">Getting around</span>
+            {(day.transit ?? []).map((transit) => (
+              <a key={`${transit.from}-${transit.to}`} className="inline-flex items-center gap-1 rounded bg-white px-2 py-1 font-medium text-ink/68 hover:text-reef" href={transit.mapLink} target="_blank" rel="noreferrer">
+                <Route size={13} aria-hidden />
+                {transit.summary}
+              </a>
+            ))}
+          </div>
+        ) : null}
+
+        <div className="mt-3 rounded-lg border border-ink/10 bg-white p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-reef">Add to day {day.day}</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_130px_120px_96px]">
+            <input className="rounded-lg border border-ink/10 px-3 py-2 text-sm" placeholder="Add place, activity, or food stop" value={drafts[day.day]?.title ?? ""} onChange={(event) => updateDraft(day.day, { title: event.target.value })} />
+            <select className="rounded-lg border border-ink/10 px-3 py-2 text-sm" value={drafts[day.day]?.category ?? "activity"} onChange={(event) => updateDraft(day.day, { category: event.target.value as ItineraryAdditionCategory })}>
+              <option value="food">Food</option>
+              <option value="activity">Activity</option>
+              <option value="show">Show</option>
+              <option value="shopping">Shopping</option>
+              <option value="relaxation">Relaxation</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input className="rounded-lg border border-ink/10 px-3 py-2 text-sm" placeholder={`Cost (${currency ?? "USD"})`} type="number" min={0} value={drafts[day.day]?.estimatedCost ?? ""} onChange={(event) => updateDraft(day.day, { estimatedCost: event.target.value })} />
+            <button className="inline-flex items-center justify-center gap-1 rounded-lg bg-reef px-3 py-2 text-sm font-semibold text-white" onClick={() => addDayItem(day.day)}>
+              <Plus size={14} aria-hidden />
+              Add
+            </button>
+          </div>
+
+          {(day.additions ?? []).length > 0 ? (
+            <div className="mt-3 grid gap-2">
+              {(day.additions ?? []).map((item) => (
+                <div key={item.id} className="rounded-lg bg-ink/5 px-3 py-3 text-sm">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">{item.title}</span>
+                    <span className="rounded bg-coral/10 px-2 py-0.5 text-xs font-medium capitalize text-coral">{item.category}</span>
+                    {item.estimatedCost ? <span className="text-xs text-ink/58">about {formatMoney(item.estimatedCost, currency)}</span> : null}
+                  </div>
+                  {item.transit ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-ink/62">
+                      <span className="inline-flex items-center gap-1">
+                        <Route size={13} aria-hidden />
+                        {item.transit.summary}
+                      </span>
+                      <a className="font-medium text-reef hover:underline" href={item.transit.mapLink} target="_blank" rel="noreferrer">
+                        Open route
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Panel({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="glass-panel rounded-lg p-5">
@@ -524,4 +559,27 @@ function RecommendationPanel({ title, icon, items }: { title: string; icon: Reac
       </div>
     </Panel>
   );
+}
+
+function groupItineraryDays(days: ItineraryDay[]) {
+  if (days.length <= 2) {
+    return [{ label: "Plan steps", title: "Core days", days, totalCost: totalDayCost(days) }];
+  }
+
+  const lastDay = days[days.length - 1]?.day;
+  const groups = [
+    { label: "Step 1", title: "Arrival and first look", days: days.filter((day) => day.day === 1) },
+    { label: "Step 2", title: "Core trip days", days: days.filter((day) => day.day > 1 && day.day < lastDay) },
+    { label: "Step 3", title: "Departure day", days: days.filter((day) => day.day === lastDay) }
+  ].filter((group) => group.days.length > 0);
+
+  return groups.map((group) => ({ ...group, totalCost: totalDayCost(group.days) }));
+}
+
+function totalDayCost(days: ItineraryDay[]) {
+  return days.reduce((sum, day) => sum + day.estimatedCost + (day.additions ?? []).reduce((additionSum, item) => additionSum + (item.estimatedCost ?? 0), 0), 0);
+}
+
+function destinationConfidence(costLevel: number) {
+  return Math.max(0.58, Math.min(0.76, 0.78 - costLevel * 0.03));
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Route, Sparkles, Users } from "lucide-react";
+import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Route, Sparkles, Users, WalletCards } from "lucide-react";
 import { writeCurrentTrip } from "@/lib/travel/storage";
 import { currencyOptions, formatMoney } from "@/lib/travel/currency";
 import type { CityTravelPreference, CurrencyCode, Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
@@ -36,6 +36,12 @@ const initialRequest: TripRequest = {
   cityTravelPreference: "mixed"
 };
 
+const trackerSplits = {
+  relaxed: { lodging: 0.4, transport: 0.16, food: 0.2, activities: 0.12 },
+  balanced: { lodging: 0.36, transport: 0.17, food: 0.21, activities: 0.15 },
+  packed: { lodging: 0.32, transport: 0.17, food: 0.2, activities: 0.22 }
+} as const;
+
 export function TripPlannerWizard() {
   const router = useRouter();
   const [request, setRequest] = useState<TripRequest>(initialRequest);
@@ -47,8 +53,7 @@ export function TripPlannerWizard() {
   const [showDestinationSuggestions, setShowDestinationSuggestions] = useState(false);
 
   const currency = request.currency ?? "USD";
-  const perPersonDay = useMemo(() => Math.round(request.totalBudget / Math.max(1, request.travelers * request.tripLengthDays)), [request]);
-  const budgetTone = perPersonDay < 90 ? "Tight" : perPersonDay < 180 ? "Workable" : "Comfortable";
+  const budgetTracker = useMemo(() => deriveBudgetTracker(request), [request]);
 
   useLocationSuggestions(request.origin, true, "origin", setOriginSuggestions);
   useLocationSuggestions(request.destination ?? "", request.preferredDestinationEnabled, "destination", setDestinationSuggestions);
@@ -105,92 +110,95 @@ export function TripPlannerWizard() {
         </div>
 
         <div className="grid gap-6 p-5 sm:p-8">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_220px]">
-            <Field label="Origin" icon={<Plane size={17} />}>
-              <div className="relative">
-                <input
-                  className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
-                  value={request.origin}
-                  role="combobox"
-                  aria-expanded={showOriginSuggestions}
-                  aria-controls="origin-suggestions"
-                  aria-autocomplete="list"
-                  onFocus={() => setShowOriginSuggestions(true)}
-                  onBlur={() => window.setTimeout(() => setShowOriginSuggestions(false), 120)}
-                  onChange={(event) => {
-                    setRequest({ ...request, origin: event.target.value });
-                    setShowOriginSuggestions(true);
+          <StepSection step="Step 1" title="Route" icon={<Compass size={17} />}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_220px]">
+              <Field label="Origin" icon={<Plane size={17} />}>
+                <div className="relative">
+                  <input
+                    className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
+                    value={request.origin}
+                    role="combobox"
+                    aria-expanded={showOriginSuggestions}
+                    aria-controls="origin-suggestions"
+                    aria-autocomplete="list"
+                    onFocus={() => setShowOriginSuggestions(true)}
+                    onBlur={() => window.setTimeout(() => setShowOriginSuggestions(false), 120)}
+                    onChange={(event) => {
+                      setRequest({ ...request, origin: event.target.value });
+                      setShowOriginSuggestions(true);
+                    }}
+                  />
+                  <LocationSuggestionList
+                    id="origin-suggestions"
+                    visible={showOriginSuggestions}
+                    locations={originSuggestions}
+                    selectedValue={request.origin}
+                    onSelect={(location) => {
+                      setRequest({ ...request, origin: location.label });
+                      setShowOriginSuggestions(false);
+                    }}
+                  />
+                </div>
+              </Field>
+              <Field label="Destination mode" icon={<MapPin size={17} />}>
+                <button
+                  className="focus-ring flex w-full items-center justify-between rounded-lg border border-ink/10 bg-white px-3 py-3 text-left"
+                  onClick={() => {
+                    const preferredDestinationEnabled = !request.preferredDestinationEnabled;
+                    setRequest({ ...request, preferredDestinationEnabled });
+                    if (!preferredDestinationEnabled) setDestinationSuggestions([]);
                   }}
-                />
-                <LocationSuggestionList
-                  id="origin-suggestions"
-                  visible={showOriginSuggestions}
-                  locations={originSuggestions}
-                  selectedValue={request.origin}
-                  onSelect={(location) => {
-                    setRequest({ ...request, origin: location.label });
-                    setShowOriginSuggestions(false);
-                  }}
-                />
-              </div>
-            </Field>
-            <Field label="Destination mode" icon={<MapPin size={17} />}>
-              <button
-                className="focus-ring flex w-full items-center justify-between rounded-lg border border-ink/10 bg-white px-3 py-3 text-left"
-                onClick={() => {
-                  const preferredDestinationEnabled = !request.preferredDestinationEnabled;
-                  setRequest({ ...request, preferredDestinationEnabled });
-                  if (!preferredDestinationEnabled) setDestinationSuggestions([]);
-                }}
-              >
-                {request.preferredDestinationEnabled ? "Use my destination" : "Find trending/hot"}
-                <Sparkles size={16} className="text-coral" aria-hidden />
-              </button>
-            </Field>
-            <Field label="Currency" icon={<DollarSign size={17} />}>
-              <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={currency} onChange={(event) => setRequest({ ...request, currency: event.target.value as CurrencyCode })}>
-                {currencyOptions.map((option) => (
-                  <option key={option.code} value={option.code}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
+                >
+                  {request.preferredDestinationEnabled ? "Use my destination" : "Find trending/hot"}
+                  <Sparkles size={16} className="text-coral" aria-hidden />
+                </button>
+              </Field>
+              <Field label="Currency" icon={<DollarSign size={17} />}>
+                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={currency} onChange={(event) => setRequest({ ...request, currency: event.target.value as CurrencyCode })}>
+                  {currencyOptions.map((option) => (
+                    <option key={option.code} value={option.code}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
 
-          {request.preferredDestinationEnabled ? (
-            <Field label="Preferred destination" icon={<Compass size={17} />}>
-              <div className="relative">
-                <input
-                  className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
-                  placeholder="Lisbon, Nairobi, Sapporo..."
-                  value={request.destination}
-                  role="combobox"
-                  aria-expanded={showDestinationSuggestions}
-                  aria-controls="destination-suggestions"
-                  aria-autocomplete="list"
-                  onFocus={() => setShowDestinationSuggestions(true)}
-                  onBlur={() => window.setTimeout(() => setShowDestinationSuggestions(false), 120)}
-                  onChange={(event) => {
-                    setRequest({ ...request, destination: event.target.value });
-                    setShowDestinationSuggestions(true);
-                  }}
-                />
-                <LocationSuggestionList
-                  id="destination-suggestions"
-                  visible={showDestinationSuggestions}
-                  locations={destinationSuggestions}
-                  selectedValue={request.destination ?? ""}
-                  onSelect={(location) => {
-                    setRequest({ ...request, destination: location.label });
-                    setShowDestinationSuggestions(false);
-                  }}
-                />
-              </div>
-            </Field>
-          ) : null}
+            {request.preferredDestinationEnabled ? (
+              <Field label="Preferred destination" icon={<Compass size={17} />}>
+                <div className="relative">
+                  <input
+                    className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
+                    placeholder="Lisbon, Nairobi, Sapporo..."
+                    value={request.destination}
+                    role="combobox"
+                    aria-expanded={showDestinationSuggestions}
+                    aria-controls="destination-suggestions"
+                    aria-autocomplete="list"
+                    onFocus={() => setShowDestinationSuggestions(true)}
+                    onBlur={() => window.setTimeout(() => setShowDestinationSuggestions(false), 120)}
+                    onChange={(event) => {
+                      setRequest({ ...request, destination: event.target.value });
+                      setShowDestinationSuggestions(true);
+                    }}
+                  />
+                  <LocationSuggestionList
+                    id="destination-suggestions"
+                    visible={showDestinationSuggestions}
+                    locations={destinationSuggestions}
+                    selectedValue={request.destination ?? ""}
+                    onSelect={(location) => {
+                      setRequest({ ...request, destination: location.label });
+                      setShowDestinationSuggestions(false);
+                    }}
+                  />
+                </div>
+              </Field>
+            ) : null}
+          </StepSection>
 
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StepSection step="Step 2" title="Dates and travelers" icon={<CalendarDays size={17} />}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Date mode" icon={<CalendarDays size={17} />}>
               <div className="grid grid-cols-2 rounded-lg border border-ink/10 bg-white p-1">
                 {(["month", "exact"] as TravelDateMode[]).map((mode) => (
@@ -225,38 +233,41 @@ export function TripPlannerWizard() {
             <Field label="Travelers" icon={<Users size={17} />}>
               <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={1} max={12} value={request.travelers} onChange={(event) => setRequest({ ...request, travelers: Number(event.target.value) })} />
             </Field>
-            <Field label="Total budget" icon={<DollarSign size={17} />}>
-              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={250} step={50} value={request.totalBudget} onChange={(event) => setRequest({ ...request, totalBudget: Number(event.target.value) })} />
-            </Field>
-          </div>
+            </div>
+          </StepSection>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Travel style" icon={<Sparkles size={17} />}>
-              <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.travelStyle} onChange={(event) => setRequest({ ...request, travelStyle: event.target.value as TravelStyle })}>
-                <option value="relaxed">Relaxed</option>
-                <option value="balanced">Balanced</option>
-                <option value="packed">Packed</option>
-              </select>
-            </Field>
-            <Field label="Transport" icon={<Car size={17} />}>
-              <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.transportPreference} onChange={(event) => setRequest({ ...request, transportPreference: event.target.value as TransportPreference })}>
-                <option value="flexible">Flexible</option>
-                <option value="rental-car">Rental car</option>
-                <option value="public-transit">Transit/rideshare</option>
-              </select>
-            </Field>
-            <Field label="In-city travel" icon={<Route size={17} />}>
-              <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.cityTravelPreference ?? "mixed"} onChange={(event) => setRequest({ ...request, cityTravelPreference: event.target.value as CityTravelPreference })}>
-                <option value="mixed">Mixed</option>
-                <option value="walkable">Walkable</option>
-                <option value="public-transit">Public transit</option>
-                <option value="rideshare">Rideshare</option>
-                <option value="rental-car">Rental car</option>
-              </select>
-            </Field>
-          </div>
+          <StepSection step="Step 3" title="Budget and pace" icon={<WalletCards size={17} />}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Total budget" icon={<DollarSign size={17} />}>
+                <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={250} step={50} value={request.totalBudget} onChange={(event) => setRequest({ ...request, totalBudget: Number(event.target.value) })} />
+              </Field>
+              <Field label="Travel style" icon={<Sparkles size={17} />}>
+                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.travelStyle} onChange={(event) => setRequest({ ...request, travelStyle: event.target.value as TravelStyle })}>
+                  <option value="relaxed">Relaxed</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="packed">Packed</option>
+                </select>
+              </Field>
+              <Field label="Transport" icon={<Car size={17} />}>
+                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.transportPreference} onChange={(event) => setRequest({ ...request, transportPreference: event.target.value as TransportPreference })}>
+                  <option value="flexible">Flexible</option>
+                  <option value="rental-car">Rental car</option>
+                  <option value="public-transit">Transit/rideshare</option>
+                </select>
+              </Field>
+              <Field label="In-city travel" icon={<Route size={17} />}>
+                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.cityTravelPreference ?? "mixed"} onChange={(event) => setRequest({ ...request, cityTravelPreference: event.target.value as CityTravelPreference })}>
+                  <option value="mixed">Mixed</option>
+                  <option value="walkable">Walkable</option>
+                  <option value="public-transit">Public transit</option>
+                  <option value="rideshare">Rideshare</option>
+                  <option value="rental-car">Rental car</option>
+                </select>
+              </Field>
+            </div>
+          </StepSection>
 
-          <div>
+          <StepSection step="Step 4" title="Trip focus" icon={<ChefHat size={17} />}>
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink/70">
               <ChefHat size={17} aria-hidden />
               Interests
@@ -274,7 +285,7 @@ export function TripPlannerWizard() {
                 </button>
               ))}
             </div>
-          </div>
+          </StepSection>
 
           {error ? <p className="rounded-lg bg-coral/10 px-4 py-3 text-sm font-medium text-coral">{error}</p> : null}
 
@@ -285,15 +296,7 @@ export function TripPlannerWizard() {
       </div>
 
       <aside className="grid content-start gap-4">
-        <div className="glass-panel rounded-lg p-5">
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Live budget read</p>
-          <p className="mt-3 text-4xl font-semibold">{formatMoney(perPersonDay, currency)}</p>
-          <p className="mt-1 text-sm text-ink/60">per traveler per day</p>
-          <div className="mt-4 h-3 rounded-full bg-ink/10">
-            <div className="h-3 rounded-full bg-coral" style={{ width: `${Math.min(100, Math.max(18, perPersonDay / 3))}%` }} />
-          </div>
-          <p className="mt-4 text-sm font-medium">{budgetTone} starting point</p>
-        </div>
+        <LiveBudgetTracker tracker={budgetTracker} currency={currency} />
         <div className="rounded-lg bg-white/70 p-5 shadow-soft">
           <p className="text-sm font-semibold text-ink">What Roamly returns</p>
           <div className="mt-4 grid gap-3 text-sm text-ink/70">
@@ -438,4 +441,126 @@ function Field({ label, icon, children }: { label: string; icon: React.ReactNode
       {children}
     </label>
   );
+}
+
+function StepSection({ step, title, icon, children }: { step: string; title: string; icon: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="rounded-lg border border-ink/10 bg-white/58 p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex size-9 items-center justify-center rounded-lg bg-reef/10 text-reef">{icon}</span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-ink/42">{step}</p>
+            <h2 className="font-semibold text-ink">{title}</h2>
+          </div>
+        </div>
+      </div>
+      <div className="grid gap-4">{children}</div>
+    </section>
+  );
+}
+
+type BudgetTracker = ReturnType<typeof deriveBudgetTracker>;
+
+function LiveBudgetTracker({ tracker, currency }: { tracker: BudgetTracker; currency: CurrencyCode }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-ink/10 bg-white shadow-subtle">
+      <div className="bg-ink p-5 text-paper">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/54">Live budget tracker</p>
+            <p className="mt-3 text-4xl font-semibold">{formatMoney(tracker.dailySpendTarget, currency)}</p>
+            <p className="mt-1 text-sm text-paper/62">daily spend target</p>
+          </div>
+          <span className={`rounded-full px-3 py-1 text-sm font-semibold ${tracker.toneClass}`}>{tracker.tone}</span>
+        </div>
+        <div className="mt-5 h-2 rounded-full bg-white/14">
+          <div className={`h-2 rounded-full ${tracker.barClass}`} style={{ width: `${tracker.percent}%` }} />
+        </div>
+        <p className="mt-4 text-sm font-medium text-paper/76">{tracker.action}</p>
+      </div>
+
+      <div className="grid gap-3 p-4">
+        <div className="grid grid-cols-2 gap-3">
+          <BudgetMetric icon={<WalletCards size={15} />} label="Trip total" value={formatMoney(tracker.total, currency)} />
+          <BudgetMetric icon={<Users size={15} />} label="Traveler/day" value={formatMoney(tracker.perTravelerDay, currency)} />
+        </div>
+        <div className="grid gap-2">
+          {tracker.rows.map((row) => (
+            <BudgetSplitRow key={row.label} label={row.label} value={formatMoney(row.value, currency)} percent={row.percent} tone={row.tone} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BudgetMetric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-ink/10 bg-paper/70 p-3">
+      <span className="flex items-center gap-2 text-xs font-medium text-ink/52">
+        {icon}
+        {label}
+      </span>
+      <span className="mt-2 block text-lg font-semibold text-ink">{value}</span>
+    </div>
+  );
+}
+
+function BudgetSplitRow({ label, value, percent, tone }: { label: string; value: string; percent: number; tone: "reef" | "gold" | "coral" }) {
+  return (
+    <div className="rounded-lg bg-ink/5 px-3 py-2">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="text-ink/62">{label}</span>
+        <span className="font-semibold text-ink/82">{value}</span>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-ink/10">
+        <div className={`h-1.5 rounded-full ${tone === "reef" ? "bg-reef" : tone === "gold" ? "bg-gold" : "bg-coral"}`} style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function deriveBudgetTracker(request: TripRequest) {
+  const split = trackerSplits[request.travelStyle];
+  const total = Math.max(0, request.totalBudget);
+  const travelers = Math.max(1, request.travelers);
+  const days = Math.max(1, request.tripLengthDays);
+  const nights = Math.max(1, days - 1);
+  const travelerDays = travelers * days;
+  const transportBoost = request.transportPreference === "rental-car" ? 0.04 : request.transportPreference === "public-transit" ? -0.02 : 0;
+  const transportShare = Math.max(0.12, split.transport + transportBoost);
+  const lodging = Math.round(total * split.lodging);
+  const transport = Math.round(total * transportShare);
+  const food = Math.round(total * split.food);
+  const activities = Math.round(total * split.activities);
+  const buffer = Math.max(0, total - lodging - transport - food - activities);
+  const perTravelerDay = Math.round(total / travelerDays);
+  const dailySpendTarget = Math.round((food + activities) / travelerDays);
+  const roomTarget = Math.round(lodging / nights);
+  const transportTarget = Math.round(transport / travelers);
+  const score = perTravelerDay < 90 ? 32 : perTravelerDay < 180 ? 66 : 92;
+  const tone = perTravelerDay < 90 ? "Tight" : perTravelerDay < 180 ? "Balanced" : "Flexible";
+
+  return {
+    total,
+    tone,
+    percent: score,
+    perTravelerDay,
+    dailySpendTarget,
+    toneClass: tone === "Tight" ? "bg-coral/20 text-coral" : tone === "Balanced" ? "bg-gold/25 text-paper" : "bg-reef/20 text-reef",
+    barClass: tone === "Tight" ? "bg-coral" : tone === "Balanced" ? "bg-gold" : "bg-reef",
+    action: tone === "Tight" ? "Shorten, choose transit, or raise budget." : tone === "Balanced" ? "Book flights/stays before upgrades." : "Room for selective upgrades.",
+    rows: [
+      { label: "Room target", value: roomTarget, percent: percentOf(lodging, total), tone: "reef" as const },
+      { label: "Flight + ground", value: transportTarget, percent: percentOf(transport, total), tone: request.transportPreference === "rental-car" ? ("gold" as const) : ("reef" as const) },
+      { label: "Food / day", value: Math.round(food / travelerDays), percent: percentOf(food, total), tone: "reef" as const },
+      { label: "Activities / day", value: Math.round(activities / travelerDays), percent: percentOf(activities, total), tone: "gold" as const },
+      { label: "Buffer", value: buffer, percent: percentOf(buffer, total), tone: buffer < total * 0.08 ? ("coral" as const) : ("reef" as const) }
+    ]
+  };
+}
+
+function percentOf(value: number, total: number) {
+  return Math.min(100, Math.max(5, Math.round((value / Math.max(1, total)) * 100)));
 }
