@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BedDouble, Bookmark, Calendar, Car, ChefHat, Coffee, ExternalLink, Hotel, MapPinned, Moon, Plane, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
+import { ArrowLeft, BedDouble, Bookmark, Calendar, Car, ChefHat, Coffee, Hotel, MapPinned, Moon, Plane, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
 import { BudgetMeter } from "@/components/BudgetMeter";
 import { PriceComparisonChart } from "@/components/PriceComparisonChart";
+import { Button } from "@/components/ui/button";
+import { applyTripSelectionsToBudget } from "@/lib/travel/pricing";
 import { isTripSaved, readCurrentTrip, saveTrip, updateSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
 import { buildTransitPlan } from "@/lib/travel/transit";
 import { formatMoney } from "@/lib/travel/currency";
@@ -36,11 +38,11 @@ export function TripResults() {
         const current = readCurrentTrip();
         if (!current) return;
         const selectedStay = current.selectedStay ?? hotelToStay(current);
-        const normalized = {
+        const normalized = applyTripSelectionsToBudget({
           ...current,
           itinerary: current.itinerary.map((day) => ({ ...day, additions: day.additions ?? [], transit: day.transit ?? [] })),
           selectedStay
-        };
+        });
         setPlan(normalized);
         writeCurrentTrip(normalized);
         setSaved(await isTripSaved(normalized.id));
@@ -51,9 +53,10 @@ export function TripResults() {
   }, []);
 
   function persist(next: TripPlan) {
-    setPlan(next);
-    writeCurrentTrip(next);
-    if (saved) void updateSavedTrip(next);
+    const priced = applyTripSelectionsToBudget(next);
+    setPlan(priced);
+    writeCurrentTrip(priced);
+    if (saved) void updateSavedTrip(priced);
   }
 
   async function refine(intent: RefinementIntent) {
@@ -156,12 +159,13 @@ export function TripResults() {
   return (
     <main className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <button className="flex items-center gap-2 rounded-lg bg-white/70 px-3 py-2 text-sm font-medium text-ink/70" onClick={() => router.push("/")}>
+        <Button variant="secondary" size="sm" onClick={() => router.push("/")}>
           <ArrowLeft size={16} aria-hidden />
           Planner
-        </button>
-        <button
-          className="flex items-center gap-2 rounded-lg bg-reef px-4 py-2 text-sm font-semibold text-white"
+        </Button>
+        <Button
+          variant="reef"
+          size="sm"
           onClick={() => {
             void saveTrip(plan).then(() => setSaved(true));
             writeCurrentTrip(plan);
@@ -169,7 +173,7 @@ export function TripResults() {
         >
           <Bookmark size={16} aria-hidden />
           {saved ? "Saved" : "Save trip"}
-        </button>
+        </Button>
       </div>
 
       <section className="glass-panel overflow-hidden rounded-lg">
@@ -184,8 +188,8 @@ export function TripResults() {
               <p className="mt-2 text-xl text-paper/78">{plan.destination.country}</p>
               <p className="mt-6 max-w-2xl text-base leading-7 text-paper/80">{plan.destination.summary}</p>
               <div className="mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
-                <TravelActionCard href="/options/hotels" icon={<BedDouble size={18} />} title={lowestHotel ? `Hotels starting from ${formatMoney(lowestHotel.nightlyPrice, currency)}/night` : "Review hotel options"} meta={plan.selectedHotel?.name ?? plan.selectedStay?.label ?? "Select or keep the default stay"} />
-                <TravelActionCard href="/options/flights" icon={<Plane size={18} />} title={lowestFlight ? `Flights starting from ${formatMoney(lowestFlight.estimatedPrice, currency)} round-trip` : "Review flight options"} meta={plan.selectedFlightQuote?.displayName ?? "Select a provider search or keep the default estimate"} />
+                <TravelActionCard href="/options/hotels" icon={<BedDouble size={18} />} title={lowestHotel ? `Stays from ${formatMoney(lowestHotel.nightlyPrice, currency)}/night` : "Review stay packages"} meta={plan.selectedHotel?.name ?? plan.selectedHotelQuote?.displayName ?? plan.selectedStay?.label ?? "Compare stays for this trip"} />
+                <TravelActionCard href="/options/flights" icon={<Plane size={18} />} title={lowestFlight ? `Flights from ${formatMoney(lowestFlight.estimatedPrice, currency)} round-trip` : "Review flight packages"} meta={plan.selectedFlightQuote?.displayName ?? "Compare cheaper, faster, and more comfortable packages"} />
               </div>
             </div>
             <BudgetMeter
@@ -194,12 +198,12 @@ export function TripResults() {
               actions={[
                 {
                   label: "Find cheaper plan",
-                  description: "Switches toward lower-cost destinations, transit, and value stays.",
+                  description: "Searches lower-cost destinations, dates, transit, value stays, and cheaper flight packages.",
                   onClick: () => void refine("cheaper"),
                   disabled: Boolean(isRefining)
                 },
                 { label: "Compare hotels", description: "Tune the nightly target and select the stay used for route planning.", href: "/options/hotels" },
-                { label: "Compare flights", description: "Open flight estimates and provider searches before booking.", href: "/options/flights" }
+                { label: "Compare flights", description: "Choose cheaper, faster, fewer-stop, or comfort-focused packages.", href: "/options/flights" }
               ]}
             />
           </div>
@@ -285,13 +289,12 @@ export function TripResults() {
           <Panel title="Restaurants & food" icon={<ChefHat size={18} />}>
             <div className="grid gap-3 sm:grid-cols-2">
               {plan.restaurants.map((restaurant) => (
-                <a key={restaurant.id} className="rounded-lg border border-ink/10 bg-white/76 p-4 transition hover:border-reef/40 hover:bg-white" href={restaurant.link} target="_blank" rel="noreferrer">
+                <article key={restaurant.id} className="rounded-lg border border-ink/10 bg-white/76 p-4">
                   <span className="flex items-start justify-between gap-3">
                     <span>
                       <span className="block font-semibold">{restaurant.name}</span>
                       <span className="mt-1 block text-sm capitalize text-ink/62">{restaurant.cuisine}</span>
                     </span>
-                    <ExternalLink size={15} className="mt-1 shrink-0 text-ink/42" aria-hidden />
                   </span>
                   <span className="mt-4 grid gap-2 text-sm text-ink/64">
                     <span className="flex items-center gap-2">
@@ -307,11 +310,11 @@ export function TripResults() {
                       {restaurant.rating.toFixed(1)} rating estimate
                     </span>
                     <span className="flex flex-wrap gap-2 text-xs font-medium">
-                      <span className="rounded bg-reef/10 px-2 py-1 text-reef">Planner estimate</span>
+                      <span className="rounded bg-reef/10 px-2 py-1 text-reef">Estimated price</span>
                       <span className="rounded bg-ink/6 px-2 py-1 text-ink/58">{Math.round(restaurant.confidence * 100)}% confidence</span>
                     </span>
                   </span>
-                </a>
+                </article>
               ))}
             </div>
           </Panel>
@@ -336,20 +339,20 @@ export function TripResults() {
 
         <div className="grid content-start gap-6">
           <TripSummaryPanel plan={plan} saved={saved} />
-          <RecommendationPanel title="Hotels" icon={<Hotel size={18} />} items={plan.hotels.map((hotel) => ({ name: hotel.name, meta: `${hotel.location} - ${formatMoney(hotel.nightlyPrice, currency)}/night`, link: hotel.link, source: "Planner estimate", confidence: hotel.confidence }))} />
-          <RecommendationPanel title="Transport" icon={<Car size={18} />} items={plan.cars.map((car) => ({ name: car.name, meta: `${car.pickupLocation} - ${formatMoney(car.dailyPrice, currency)}/day`, link: car.link, source: "Planner estimate", confidence: car.confidence }))} />
-          <RecommendationPanel title="Attractions" icon={<Ticket size={18} />} items={plan.attractions.slice(0, 3).map((attraction) => ({ name: attraction.name, meta: `${attraction.durationHours}h - about ${formatMoney(attraction.estimatedPrice, currency)}`, link: attraction.link, source: "Planner estimate", confidence: attraction.confidence }))} />
+          <RecommendationPanel title="Hotels" icon={<Hotel size={18} />} ctaHref="/options/hotels" ctaLabel="Compare stays" items={plan.hotels.map((hotel) => ({ name: hotel.name, meta: `${hotel.location} - ${formatMoney(hotel.nightlyPrice, currency)}/night`, source: "Estimated price", confidence: hotel.confidence }))} />
+          <RecommendationPanel title="Transport" icon={<Car size={18} />} items={plan.cars.map((car) => ({ name: car.name, meta: `${car.pickupLocation} - ${formatMoney(car.dailyPrice, currency)}/day`, source: "Estimated price", confidence: car.confidence }))} />
+          <RecommendationPanel title="Attractions" icon={<Ticket size={18} />} items={plan.attractions.slice(0, 3).map((attraction) => ({ name: attraction.name, meta: `${attraction.durationHours}h - about ${formatMoney(attraction.estimatedPrice, currency)}`, source: "Estimated price", confidence: attraction.confidence }))} />
           <Panel title="Alternates" icon={<MapPinned size={18} />}>
             <div className="grid gap-3">
               {plan.alternates.map((destination) => (
-                <a key={destination.id} className="rounded-lg bg-white/70 p-3 transition hover:bg-white" href={destination.bookingLink} target="_blank" rel="noreferrer">
+                <div key={destination.id} className="rounded-lg bg-white/70 p-3">
                   <span className="block font-semibold">{destination.name}</span>
                   <span className="mt-1 block text-sm text-ink/60">{destination.summary}</span>
                   <span className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
-                    <span className="rounded bg-reef/10 px-2 py-1 text-reef">Planner estimate</span>
+                    <span className="rounded bg-reef/10 px-2 py-1 text-reef">Alternative destination</span>
                     <span className="rounded bg-ink/6 px-2 py-1 text-ink/58">{Math.round(destinationConfidence(destination.costLevel) * 100)}% confidence</span>
                   </span>
-                </a>
+                </div>
               ))}
             </div>
           </Panel>
@@ -357,7 +360,7 @@ export function TripResults() {
       </section>
 
       <section className="mt-6 rounded-lg bg-ink/5 p-4 text-sm text-ink/64">
-        {plan.notes.map((note) => (
+        {displayNotes(plan.notes).map((note) => (
           <p key={note}>{note}</p>
         ))}
       </section>
@@ -402,6 +405,7 @@ function TripSummaryPanel({ plan, saved }: { plan: TripPlan; saved: boolean }) {
       <div className="grid gap-3 text-sm">
         <SummaryRow label="Dates" value={dateSummary(plan)} />
         <SummaryRow label="Travelers" value={`${plan.request.travelers} traveler${plan.request.travelers === 1 ? "" : "s"}`} />
+        <SummaryRow label="Trip estimate" value={formatMoney(plan.budget.totalEstimated, currency)} />
         <SummaryRow label="Budget" value={formatMoney(plan.request.totalBudget, currency)} />
         <SummaryRow label="Selected hotel" value={plan.selectedHotel?.name ?? plan.selectedStay?.label ?? "Default starting estimate"} />
         <SummaryRow label="Flight estimate" value={plan.selectedFlightQuote ? `${plan.selectedFlightQuote.displayName} ${formatMoney(plan.selectedFlightQuote.estimatedPrice, currency)}` : lowestFlight ? `${formatMoney(lowestFlight.estimatedPrice, currency)} starting` : "Default starting estimate"} />
@@ -540,12 +544,12 @@ function Panel({ title, icon, children }: { title: string; icon: React.ReactNode
   );
 }
 
-function RecommendationPanel({ title, icon, items }: { title: string; icon: React.ReactNode; items: { name: string; meta: string; link: string; source?: string; confidence?: number }[] }) {
+function RecommendationPanel({ title, icon, items, ctaHref, ctaLabel }: { title: string; icon: React.ReactNode; items: { name: string; meta: string; source?: string; confidence?: number }[]; ctaHref?: string; ctaLabel?: string }) {
   return (
     <Panel title={title} icon={icon}>
       <div className="grid gap-3">
         {items.map((item) => (
-          <a key={item.name} className="rounded-lg bg-white/72 p-3 transition hover:bg-white" href={item.link} target="_blank" rel="noreferrer">
+          <div key={item.name} className="rounded-lg bg-white/72 p-3">
             <span className="block font-semibold">{item.name}</span>
             <span className="mt-1 block text-sm text-ink/60">{item.meta}</span>
             {item.source ? (
@@ -554,11 +558,29 @@ function RecommendationPanel({ title, icon, items }: { title: string; icon: Reac
                 {typeof item.confidence === "number" ? <span className="rounded bg-ink/6 px-2 py-1 text-ink/52">{Math.round(item.confidence * 100)}% confidence</span> : null}
               </span>
             ) : null}
-          </a>
+          </div>
         ))}
+        {ctaHref && ctaLabel ? (
+          <Button asChild variant="outline" size="sm">
+            <Link href={ctaHref}>{ctaLabel}</Link>
+          </Button>
+        ) : null}
       </div>
     </Panel>
   );
+}
+
+function displayNotes(notes: string[]) {
+  return notes
+    .map((note) =>
+      note
+        .replace("Fallback estimates from major travel search surfaces. Open source links to verify live prices before booking.", "Prices are planning estimates; compare packages before making final reservations.")
+        .replace("Destination ranking uses curated trend seeds and supports custom free-text destinations.", "Destination ranking considers budget fit, trip style, and current travel appeal.")
+        .replace("Destination ranking uses live trend data.", "Destination ranking considers budget fit, trip style, and current travel appeal.")
+        .replace("Refined for: cheaper.", "Cheaper search: looked for lower-cost destinations, value stays, public transit, and lower fare packages.")
+        .replace("Refined for: next destination.", "Alternative search: reviewed another destination that can fit the same trip style.")
+    )
+    .filter((note) => !/fallback|provider|supabase|api/i.test(note));
 }
 
 function groupItineraryDays(days: ItineraryDay[]) {

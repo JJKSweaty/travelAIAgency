@@ -26,12 +26,12 @@ describe("TripResults", () => {
     expect(screen.getByRole("heading", { name: /price comparison/i })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: /hotels/i }).length).toBeGreaterThan(0);
     expect(screen.getByRole("heading", { name: /restaurants & food/i })).toBeInTheDocument();
-    expect(screen.getByText(/hotels starting from CA\$90\/night/i)).toBeInTheDocument();
-    expect(screen.getByText(/flights starting from CA\$420 round-trip/i)).toBeInTheDocument();
+    expect(screen.getByText(/stays from CA\$90\/night/i)).toBeInTheDocument();
+    expect(screen.getByText(/flights from CA\$420 round-trip/i)).toBeInTheDocument();
     expect(screen.queryByText(/search travel options/i)).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /hotels starting/i })).toHaveAttribute("href", "/options/hotels");
-    expect(screen.getByRole("link", { name: /flights starting/i })).toHaveAttribute("href", "/options/flights");
-    expect(screen.getAllByText(/planner estimate/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /stays from/i })).toHaveAttribute("href", "/options/hotels");
+    expect(screen.getByRole("link", { name: /flights from/i })).toHaveAttribute("href", "/options/flights");
+    expect(screen.getAllByText(/estimated price/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/getting around/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try another destination/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /save trip/i })).toBeInTheDocument();

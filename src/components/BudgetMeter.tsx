@@ -121,12 +121,12 @@ function buildBudgetRecommendations(budget: BudgetBreakdown, topCategory: string
   if (budget.feasibility === "comfortable") {
     return [
       `Keep at least ${formatMoney(Math.min(budget.buffer, budget.remaining), currency)} as a price-change buffer.`,
-      `Upgrade selectively in ${topCategory.toLowerCase()} only if live provider prices confirm the estimate.`
+      `Upgrade selectively in ${topCategory.toLowerCase()} after comparing package options.`
     ];
   }
 
   return [
     `${topCategory} is the main lever. Compare options before adding paid activities.`,
-    "Hold the buffer until flights and lodging are verified from provider links."
+    "Hold the buffer until flights and lodging choices are selected."
   ];
 }

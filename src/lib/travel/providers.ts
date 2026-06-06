@@ -85,9 +85,9 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
     const warnings = [
       ...(request.preferredDestinationEnabled && !normalized ? ["Destination preference was enabled but no destination was provided."] : []),
       ...(request.preferredDestinationEnabled && normalized && !matchedPreferred
-        ? [`"${request.destination}" is being planned as a custom global destination with generic fallback estimates. Verify local prices and availability before booking.`]
+        ? [`"${request.destination}" is being planned with broader market estimates. Compare packages before final reservations.`]
         : []),
-      ...(!request.preferredDestinationEnabled && !hasBudgetFit ? ["No curated destination fits this budget cleanly, so the lowest-cost fallback option was selected."] : [])
+      ...(!request.preferredDestinationEnabled && !hasBudgetFit ? ["No destination fits this budget cleanly, so Roamly selected the lowest-cost match."] : [])
     ];
 
     return {
@@ -156,7 +156,7 @@ export class FallbackTravelPriceProvider implements TravelPriceProvider {
           hotels,
           lowestFlight: flightsByPrice[0],
           lowestHotel: hotelsByPrice[0],
-          sourceNote: "Fallback estimates from major travel search surfaces. Open source links to verify live prices before booking."
+          sourceNote: "Package estimates are compared across major travel search categories. Review selected packages before final reservations."
         }
       ],
       source: "fallback",
@@ -294,7 +294,7 @@ function customDestination(request: TripRequest): DestinationOption {
     id: `custom-${locationSlug(parsed.label)}`,
     name,
     country: parsed.country ?? "Global destination",
-    summary: "A user-entered global destination planned with generic fallback estimates. Open linked sources to verify local prices and availability.",
+    summary: "A custom destination planned with broader market estimates. Compare packages before final reservations.",
     imageUrl: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1400&q=80",
     costLevel,
     trendingScore: 70,

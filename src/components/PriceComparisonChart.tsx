@@ -1,4 +1,7 @@
-import { BedDouble, ExternalLink, Plane } from "lucide-react";
+import Link from "next/link";
+import { BedDouble, Plane } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/travel/currency";
 import type { CurrencyCode, PriceComparison, PriceQuote } from "@/lib/travel/types";
 
@@ -8,7 +11,7 @@ export function PriceComparisonChart({ comparison, currency }: { comparison: Pri
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">Price comparison</h2>
-          <p className="mt-1 text-sm text-ink/60">Planner estimates with live-search links. Open a source to see current provider prices.</p>
+          <p className="mt-1 text-sm text-ink/60">Compare package estimates and choose the option that best fits this trip.</p>
         </div>
         <div className="hidden rounded-lg bg-reef/10 px-3 py-2 text-sm font-semibold text-reef sm:block">
           {comparison.lowestFlight && comparison.lowestHotel
@@ -17,14 +20,14 @@ export function PriceComparisonChart({ comparison, currency }: { comparison: Pri
         </div>
       </div>
       <div className="grid gap-5 lg:grid-cols-2">
-        <QuoteGroup title="Flights" icon={<Plane size={18} />} quotes={comparison.flights} currency={currency} />
-        <QuoteGroup title="Hotels" icon={<BedDouble size={18} />} quotes={comparison.hotels} currency={currency} />
+        <QuoteGroup title="Flights" icon={<Plane size={18} />} quotes={comparison.flights} currency={currency} href="/options/flights" cta="Compare flight packages" />
+        <QuoteGroup title="Hotels" icon={<BedDouble size={18} />} quotes={comparison.hotels} currency={currency} href="/options/hotels" cta="Compare stay packages" />
       </div>
     </section>
   );
 }
 
-function QuoteGroup({ title, icon, quotes, currency }: { title: string; icon: React.ReactNode; quotes: PriceQuote[]; currency?: CurrencyCode }) {
+function QuoteGroup({ title, icon, quotes, currency, href, cta }: { title: string; icon: React.ReactNode; quotes: PriceQuote[]; currency?: CurrencyCode; href: string; cta: string }) {
   const max = Math.max(...quotes.map((quote) => quote.estimatedPrice), 1);
 
   return (
@@ -37,7 +40,7 @@ function QuoteGroup({ title, icon, quotes, currency }: { title: string; icon: Re
         {quotes.map((quote, index) => {
           const width = Math.max(18, Math.round((quote.estimatedPrice / max) * 100));
           return (
-            <a key={quote.id} className="rounded-lg bg-white/76 p-3 transition hover:bg-white" href={quote.link} target="_blank" rel="noreferrer">
+            <div key={quote.id} className="rounded-lg bg-white/76 p-3">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-semibold">{quote.displayName}</span>
                 <span className="font-semibold">
@@ -49,19 +52,18 @@ function QuoteGroup({ title, icon, quotes, currency }: { title: string; icon: Re
               </div>
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-ink/50">
                 <span className="flex flex-wrap gap-2 font-medium">
-                  <span className="rounded bg-reef/10 px-2 py-1 text-reef">{quote.source === "live" ? "Live provider" : "Planner estimate"}</span>
-                  <span className="rounded bg-ink/6 px-2 py-1 text-ink/54">{quote.linkLabel?.startsWith("Exact") ? "Exact date search" : "Open provider search"}</span>
-                  <span className="rounded bg-ink/6 px-2 py-1 text-ink/54">{Math.round(quote.confidence * 100)}% confidence</span>
-                </span>
-                <span className="inline-flex items-center gap-1 font-medium text-reef">
-                  {quote.linkLabel ?? "Open provider search"}
-                  <ExternalLink size={12} aria-hidden />
+                  <Badge>{quote.category === "flight" ? "Flight package" : "Stay package"}</Badge>
+                  <Badge variant="secondary">{quote.linkLabel?.startsWith("Exact") ? "Date-aware" : "Flexible dates"}</Badge>
+                  <Badge variant="secondary">{Math.round(quote.confidence * 100)}% confidence</Badge>
                 </span>
               </div>
-            </a>
+            </div>
           );
         })}
       </div>
+      <Button asChild variant="outline" size="sm" className="mt-3 w-full">
+        <Link href={href}>{cta}</Link>
+      </Button>
     </div>
   );
 }

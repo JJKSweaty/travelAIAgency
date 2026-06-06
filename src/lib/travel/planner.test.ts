@@ -47,7 +47,7 @@ describe("planTrip", () => {
 
   it("adds a note when preferred destination free text is not curated", async () => {
     const plan = await planTrip({ ...request, destination: "Atlantis" });
-    expect(plan.notes.some((note) => note.includes("custom global destination"))).toBe(true);
+    expect(plan.notes.some((note) => note.includes("broader market estimates"))).toBe(true);
   });
 
   it("keeps provider health available without live keys", () => {

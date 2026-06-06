@@ -2,9 +2,14 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { AlertCircle, CheckCircle2, CloudUpload, KeyRound, LogIn, LogOut, Mail, UserPlus } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, CloudUpload, KeyRound, Lock, LogIn, LogOut, Mail, MapPinned, Plane, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { importGuestTrips, readSavedTrips } from "@/lib/travel/storage";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type AuthMode = "login" | "signup" | "magic";
 
@@ -22,6 +27,7 @@ type AuthPageState = {
 export function AuthPage() {
   const configured = isSupabaseConfigured();
   const [state, setState] = useState<AuthPageState>({ email: null, input: "", password: "", message: null, messageTone: "success", loading: false, guestCount: 0, mode: "login" });
+  const availableTripCount = deviceTripCount(state.guestCount);
 
   useEffect(() => {
     const task = window.setTimeout(() => {
@@ -59,7 +65,7 @@ export function AuthPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     if (!validateEmail(email)) {
-      setMessage("Enter a valid email.", "error");
+      setMessage("Enter a valid email address.", "error");
       return;
     }
     setState((current) => ({ ...current, loading: true, message: null }));
@@ -67,7 +73,7 @@ export function AuthPage() {
       email,
       options: { emailRedirectTo: typeof window === "undefined" ? undefined : `${window.location.origin}/auth` }
     });
-    setMessage(error ? "Could not send link." : "Check your email.", error ? "error" : "success");
+    setMessage(error ? "We could not send the sign-in link. Try again." : "Check your email for a secure sign-in link.", error ? "error" : "success");
   }
 
   async function signInWithPassword() {
@@ -75,7 +81,7 @@ export function AuthPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     if (!validateEmail(email) || !state.password) {
-      setMessage("Email and password required.", "error");
+      setMessage("Enter your email and password.", "error");
       return;
     }
     setState((current) => ({ ...current, loading: true, message: null }));
@@ -83,7 +89,7 @@ export function AuthPage() {
     setState((current) => ({
       ...current,
       loading: false,
-      message: error ? "Wrong email or password." : "Signed in.",
+      message: error ? "The email or password does not match." : "You are signed in.",
       messageTone: error ? "error" : "success",
       password: error ? current.password : ""
     }));
@@ -94,27 +100,27 @@ export function AuthPage() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     if (!validateEmail(email) || state.password.length < 6) {
-      setMessage("Use email and 6+ character password.", "error");
+      setMessage("Use an email and a password with at least 6 characters.", "error");
       return;
     }
     setState((current) => ({ ...current, loading: true, message: null }));
     const { error } = await supabase.auth.signUp({ email, password: state.password });
-    setMessage(error ? "Could not create account." : "Account created. Check email.", error ? "error" : "success");
+    setMessage(error ? "We could not create the account. Try again." : "Account created. Check your email to finish setup.", error ? "error" : "success");
   }
 
   async function signOut() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
     await supabase.auth.signOut();
-    setState((current) => ({ ...current, email: null, message: "Signed out.", messageTone: "success" }));
+    setState((current) => ({ ...current, email: null, message: "You are signed out.", messageTone: "success" }));
   }
 
   async function importLocalTrips() {
     try {
       const imported = await importGuestTrips();
-      setState((current) => ({ ...current, guestCount: readSavedTrips().length, message: imported ? `Imported ${imported} guest trip${imported === 1 ? "" : "s"}.` : "No guest trips.", messageTone: "success" }));
+      setState((current) => ({ ...current, guestCount: readSavedTrips().length, message: imported ? `Added ${imported} saved trip${imported === 1 ? "" : "s"} to your account.` : "No trips to move right now.", messageTone: "success" }));
     } catch {
-      setMessage("Import failed. Check Supabase RLS.", "error");
+      setMessage("We could not move those saved trips. Try again in a moment.", "error");
     }
   }
 
@@ -126,99 +132,157 @@ export function AuthPage() {
   }
 
   return (
-    <main className="mx-auto grid w-full max-w-6xl gap-6 px-4 pb-12 sm:px-6 lg:grid-cols-[1fr_360px] lg:px-8">
-      <section className="overflow-hidden rounded-lg border border-ink/10 bg-white shadow-subtle">
-        <div className="border-b border-ink/10 bg-ink p-6 text-paper sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-coral">Roamly account</p>
-          <h1 className="mt-3 text-3xl font-semibold">Sync saved trips.</h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-paper/68">Sign in to keep plans across devices.</p>
+    <main className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-12 sm:px-6 lg:grid-cols-[1.05fr_0.95fr] lg:px-8">
+      <section className="relative min-h-[520px] overflow-hidden rounded-lg bg-ink text-paper shadow-soft">
+        <div
+          className="absolute inset-0 opacity-55"
+          style={{
+            backgroundImage: "url(https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1600&q=80)",
+            backgroundPosition: "center",
+            backgroundSize: "cover"
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-ink via-ink/76 to-reef/45" />
+        <div className="relative flex h-full min-h-[520px] flex-col justify-between p-6 sm:p-8">
+          <div>
+            <Badge variant="coral" className="bg-coral text-white">
+              Roamly account
+            </Badge>
+            <h1 className="mt-5 max-w-2xl text-4xl font-semibold leading-tight sm:text-6xl">Keep every trip ready when plans change.</h1>
+            <p className="mt-5 max-w-xl text-base leading-7 text-paper/78">
+              Save your itineraries, revisit hotel and flight choices, and pick up planning from any device.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <ValueTile icon={<MapPinned size={18} />} label="Saved plans" text="Return to trip details later." />
+            <ValueTile icon={<Plane size={18} />} label="Fast changes" text="Compare options without starting over." />
+            <ValueTile icon={<ShieldCheck size={18} />} label="Private by design" text="Your plans stay with your account." />
+          </div>
         </div>
-
-        {!configured ? (
-          <div className="m-6 rounded-lg border border-coral/20 bg-coral/10 p-4 text-sm text-coral">
-            <p className="font-semibold">Supabase not configured.</p>
-            <p className="mt-1 text-coral/80">Guest saves still work.</p>
-          </div>
-        ) : state.email ? (
-          <div className="m-6 rounded-lg border border-ink/10 bg-paper/70 p-5">
-            <span className="inline-flex items-center gap-2 rounded-full bg-reef/10 px-3 py-1 text-sm font-semibold text-reef">
-              <CheckCircle2 size={15} aria-hidden />
-              Signed in
-            </span>
-            <p className="mt-4 text-xl font-semibold">{state.email}</p>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Link className="focus-ring rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-paper hover:bg-reef" href="/saved">
-                Open saved trips
-              </Link>
-              <button className="focus-ring inline-flex items-center gap-2 rounded-lg border border-ink/10 bg-white px-4 py-3 text-sm font-semibold text-ink/70 hover:text-coral" onClick={signOut}>
-                <LogOut size={16} aria-hidden />
-                Sign out
-              </button>
-            </div>
-          </div>
-        ) : (
-          <form className="m-6 grid gap-5" onSubmit={submitAuth}>
-            <div className="grid grid-cols-3 rounded-lg border border-ink/10 bg-paper p-1">
-              <AuthModeButton active={state.mode === "login"} icon={<LogIn size={15} />} label="Log in" onClick={() => setMode("login")} />
-              <AuthModeButton active={state.mode === "signup"} icon={<UserPlus size={15} />} label="Create" onClick={() => setMode("signup")} />
-              <AuthModeButton active={state.mode === "magic"} icon={<KeyRound size={15} />} label="Link" onClick={() => setMode("magic")} />
-            </div>
-
-            <label className="block">
-              <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink/70">
-                <Mail size={17} aria-hidden />
-                Email
-              </span>
-              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="email" autoComplete="email" value={state.input} onChange={(event) => setState((current) => ({ ...current, input: event.target.value }))} />
-            </label>
-
-            {state.mode !== "magic" ? (
-              <label className="block">
-                <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink/70">
-                  <KeyRound size={17} aria-hidden />
-                  Password
-                </span>
-                <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="password" autoComplete={state.mode === "signup" ? "new-password" : "current-password"} value={state.password} onChange={(event) => setState((current) => ({ ...current, password: event.target.value }))} />
-              </label>
-            ) : null}
-
-            <button className="focus-ring inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-3 text-sm font-semibold text-paper transition hover:bg-reef disabled:cursor-not-allowed disabled:opacity-60" disabled={state.loading} type="submit">
-              {state.loading ? "Working..." : authCta(state.mode)}
-            </button>
-          </form>
-        )}
-
-        {state.message ? (
-          <p className={`mx-6 mb-6 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${state.messageTone === "error" ? "bg-coral/10 text-coral" : "bg-reef/10 text-reef"}`}>
-            {state.messageTone === "error" ? <AlertCircle size={16} aria-hidden /> : <CheckCircle2 size={16} aria-hidden />}
-            {state.message}
-          </p>
-        ) : null}
       </section>
 
-      <aside className="grid content-start gap-4">
-        <div className="rounded-lg border border-ink/10 bg-white p-5 shadow-subtle">
-          <p className="text-sm font-semibold uppercase tracking-[0.14em] text-reef">Local saves</p>
-          <p className="mt-3 text-4xl font-semibold">{state.guestCount}</p>
-          <p className="mt-1 text-sm text-ink/58">on this device</p>
-          {configured && state.email && state.guestCount > 0 ? (
-            <button className="focus-ring mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-reef px-4 py-3 text-sm font-semibold text-white" onClick={importLocalTrips}>
-              <CloudUpload size={16} aria-hidden />
-              Import guest trips
-            </button>
-          ) : null}
-        </div>
-        <Link className="rounded-lg bg-ink px-4 py-3 text-center text-sm font-semibold text-paper" href="/">
-          Continue as guest
-        </Link>
-      </aside>
+      <section className="grid content-center gap-4">
+        <Card className="overflow-hidden">
+          <CardHeader className="border-b border-ink/10 bg-white">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle>{state.email ? "You are signed in" : "Plan smarter with Roamly"}</CardTitle>
+                <CardDescription>{state.email ? "Your saved trips are ready whenever you come back." : "Sign in to save trips, compare choices, and access details later."}</CardDescription>
+              </div>
+              <span className="flex size-10 items-center justify-center rounded-lg bg-reef/10 text-reef">
+                <Sparkles size={18} aria-hidden />
+              </span>
+            </div>
+          </CardHeader>
+
+          <CardContent className="pt-5">
+            {!configured ? (
+              <div className="rounded-lg border border-gold/30 bg-gold/10 p-4 text-sm text-ink/70">
+                <p className="font-semibold text-ink">Account sign-in is temporarily unavailable.</p>
+                <p className="mt-1">You can still plan trips and save them on this device.</p>
+              </div>
+            ) : state.email ? (
+              <div className="rounded-lg border border-reef/20 bg-reef/5 p-5">
+                <Badge>
+                  <CheckCircle2 size={14} aria-hidden />
+                  Signed in
+                </Badge>
+                <p className="mt-4 break-all text-xl font-semibold">{state.email}</p>
+                <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                  <Button asChild>
+                    <Link href="/saved">
+                      Open saved trips
+                      <ArrowRight size={16} aria-hidden />
+                    </Link>
+                  </Button>
+                  <Button type="button" variant="outline" onClick={signOut}>
+                    <LogOut size={16} aria-hidden />
+                    Sign out
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <form className="grid gap-5" onSubmit={submitAuth}>
+                <div className="grid grid-cols-3 rounded-lg border border-ink/10 bg-paper p-1">
+                  <AuthModeButton active={state.mode === "login"} icon={<LogIn size={15} />} label="Log in" onClick={() => setMode("login")} />
+                  <AuthModeButton active={state.mode === "signup"} icon={<UserPlus size={15} />} label="Create" onClick={() => setMode("signup")} />
+                  <AuthModeButton active={state.mode === "magic"} icon={<KeyRound size={15} />} label="Email link" onClick={() => setMode("magic")} />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="email" className="flex items-center gap-2">
+                    <Mail size={17} aria-hidden />
+                    Email
+                  </Label>
+                  <Input id="email" type="email" autoComplete="email" value={state.input} onChange={(event) => setState((current) => ({ ...current, input: event.target.value }))} />
+                </div>
+
+                {state.mode !== "magic" ? (
+                  <div className="grid gap-2">
+                    <Label htmlFor="password" className="flex items-center gap-2">
+                      <Lock size={17} aria-hidden />
+                      Password
+                    </Label>
+                    <Input id="password" type="password" autoComplete={state.mode === "signup" ? "new-password" : "current-password"} value={state.password} onChange={(event) => setState((current) => ({ ...current, password: event.target.value }))} />
+                  </div>
+                ) : null}
+
+                <Button disabled={state.loading} type="submit" size="lg">
+                  {state.loading ? "Working..." : authCta(state.mode)}
+                </Button>
+              </form>
+            )}
+
+            {state.message ? (
+              <p className={`mt-5 flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium ${state.messageTone === "error" ? "bg-coral/10 text-coral" : "bg-reef/10 text-reef"}`}>
+                {state.messageTone === "error" ? <AlertCircle size={16} aria-hidden /> : <CheckCircle2 size={16} aria-hidden />}
+                {state.message}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="grid gap-4 pt-5 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="text-sm font-semibold text-ink">Trips saved on this device</p>
+              <p className="mt-1 text-sm text-ink/60">You have {availableTripCount} trip{availableTripCount === 1 ? "" : "s"} available here.</p>
+            </div>
+            {configured && state.email && availableTripCount > 0 ? (
+              <Button variant="reef" onClick={importLocalTrips}>
+                <CloudUpload size={16} aria-hidden />
+                Add to account
+              </Button>
+            ) : (
+              <Button asChild variant="outline">
+                <Link href="/">Continue planning</Link>
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </main>
+  );
+}
+
+function deviceTripCount(fallback: number) {
+  if (typeof window === "undefined") return fallback;
+  return Math.max(fallback, readSavedTrips().length);
+}
+
+function ValueTile({ icon, label, text }: { icon: React.ReactNode; label: string; text: string }) {
+  return (
+    <div className="rounded-lg border border-white/16 bg-white/10 p-4 backdrop-blur">
+      <span className="text-coral">{icon}</span>
+      <p className="mt-3 font-semibold">{label}</p>
+      <p className="mt-1 text-sm leading-5 text-paper/68">{text}</p>
+    </div>
   );
 }
 
 function AuthModeButton({ active, icon, label, onClick }: { active: boolean; icon: React.ReactNode; label: string; onClick: () => void }) {
   return (
-    <button type="button" className={`focus-ring inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition ${active ? "bg-white text-ink shadow-subtle" : "text-ink/58 hover:text-reef"}`} onClick={onClick}>
+    <button type="button" className={`focus-ring inline-flex min-h-10 items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-semibold transition ${active ? "bg-white text-ink shadow-subtle" : "text-ink/58 hover:text-reef"}`} onClick={onClick}>
       {icon}
       {label}
     </button>

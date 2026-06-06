@@ -18,7 +18,7 @@ describe("TravelOptionsPage", () => {
     window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(createTripPlan()));
     render(<TravelOptionsPage kind="hotels" />);
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: /choose a hotel/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: /choose a stay package/i })).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/max nightly budget/i), { target: { value: "100" } });
 
     expect(screen.getByText("Value Rooms")).toBeInTheDocument();
@@ -40,6 +40,7 @@ describe("TravelOptionsPage", () => {
       const current = JSON.parse(window.sessionStorage.getItem("roamly.currentTrip") ?? "{}");
       expect(current.selectedHotel.id).toBe("h");
       expect(current.selectedStay.label).toBe("Central House");
+      expect(current.budget.totalEstimated).toBe(1660);
     });
     await waitFor(() => {
       const saved = JSON.parse(window.localStorage.getItem("roamly.savedTrips") ?? "[]");
@@ -47,18 +48,18 @@ describe("TravelOptionsPage", () => {
     });
   });
 
-  it("filters flights by round-trip budget and keeps provider links visible", async () => {
+  it("filters flights by round-trip budget and keeps compared sources visible", async () => {
     window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(createTripPlan()));
     render(<TravelOptionsPage kind="flights" />);
 
-    await waitFor(() => expect(screen.getByRole("heading", { name: /choose a flight search/i })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: /choose a flight package/i })).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/max round-trip budget/i), { target: { value: "300" } });
 
     expect(screen.getByText(/no flights are currently under CA\$300/i)).toBeInTheDocument();
     expect(screen.getByText("Google Flights")).toBeInTheDocument();
   });
 
-  it("selects a flight quote and leaves default estimates when skipped", async () => {
+  it("selects a flight quote and leaves the starting estimate available", async () => {
     const user = userEvent.setup();
     const plan = createTripPlan();
     window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(plan));

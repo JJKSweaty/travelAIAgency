@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CloudUpload, Trash2 } from "lucide-react";
+import { CloudUpload, MapPinned, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { formatMoney } from "@/lib/travel/currency";
 import { getSaveMode, importGuestTrips, listSavedTrips, readSavedTrips, removeSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
 import type { TripPlan } from "@/lib/travel/types";
@@ -26,7 +28,7 @@ export function SavedTrips() {
       setGuestCount(readSavedTrips().length);
       setTrips(await listSavedTrips());
     } catch {
-      setError("Saved trips could not be loaded. Guest trips are still available on this device.");
+      setError("Saved trips could not be loaded. Trips saved on this device are still available.");
       setTrips(readSavedTrips());
     }
   }
@@ -41,32 +43,40 @@ export function SavedTrips() {
       await importGuestTrips();
       await refresh();
     } catch {
-      setError("Guest trips could not be imported. Check your Supabase trips table and RLS policies.");
+      setError("We could not add those trips to your account. Try again in a moment.");
     }
   }
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-12 sm:px-6 lg:px-8">
+    <main className="mx-auto max-w-6xl px-4 pb-12 pt-2 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div>
         <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Saved plans</p>
-        <h1 className="mt-3 text-4xl font-semibold">{mode === "account" ? "Your Roamly library" : "Guest trip library"}</h1>
+        <h1 className="mt-3 text-4xl font-semibold">{mode === "account" ? "Your Roamly library" : "Trips saved on this device"}</h1>
         </div>
         {mode === "account" && guestCount > 0 ? (
-          <button className="inline-flex items-center gap-2 rounded-lg bg-reef px-4 py-2 text-sm font-semibold text-white" onClick={importLocalTrips}>
+          <Button variant="reef" onClick={importLocalTrips}>
             <CloudUpload size={16} aria-hidden />
-            Import guest trips
-          </button>
+            Add device trips
+          </Button>
         ) : null}
       </div>
       {error ? <p className="mb-4 rounded-lg bg-coral/10 px-4 py-3 text-sm font-medium text-coral">{error}</p> : null}
       {trips.length === 0 ? (
-        <div className="glass-panel rounded-lg p-8">
-          <p className="text-ink/70">No saved trips yet.</p>
-          <Link className="mt-5 inline-flex rounded-lg bg-ink px-4 py-3 font-semibold text-paper" href="/">
-            Start planning
-          </Link>
-        </div>
+        <Card>
+          <CardContent className="grid gap-5 p-8 text-center sm:justify-items-center">
+            <span className="mx-auto flex size-12 items-center justify-center rounded-lg bg-reef/10 text-reef">
+              <MapPinned size={22} aria-hidden />
+            </span>
+            <div>
+              <h2 className="text-2xl font-semibold">No saved trips yet</h2>
+              <p className="mt-2 text-sm text-ink/60">Save a trip plan to return to hotels, flights, and itinerary details later.</p>
+            </div>
+            <Button asChild>
+              <Link href="/">Start planning</Link>
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {trips.map((trip) => (
@@ -80,18 +90,16 @@ export function SavedTrips() {
                       {trip.request.tripLengthDays} days - {formatMoney(trip.request.totalBudget, trip.request.currency)} budget
                     </p>
                   </div>
-                  <button className="rounded-lg bg-white/70 p-2 text-coral" aria-label={`Delete ${trip.destination.name}`} onClick={() => remove(trip.id)}>
+                  <button className="focus-ring rounded-lg bg-white/70 p-2 text-coral transition hover:bg-coral/10" aria-label={`Delete ${trip.destination.name}`} onClick={() => remove(trip.id)}>
                     <Trash2 size={17} aria-hidden />
                   </button>
                 </div>
                 <p className="mt-3 line-clamp-2 text-sm leading-6 text-ink/66">{trip.destination.summary}</p>
-                <Link
-                  className="mt-5 inline-flex rounded-lg bg-reef px-4 py-2 text-sm font-semibold text-white"
-                  href="/results"
-                  onClick={() => writeCurrentTrip(trip)}
-                >
-                  Open plan
-                </Link>
+                <Button asChild variant="reef" size="sm" className="mt-5">
+                  <Link href="/results" onClick={() => writeCurrentTrip(trip)}>
+                    Open plan
+                  </Link>
+                </Button>
               </div>
             </article>
           ))}

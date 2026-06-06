@@ -64,6 +64,7 @@ export type BudgetBreakdown = {
   activities: number;
   buffer: number;
   totalEstimated: number;
+  packageBaseEstimated?: number;
   remaining: number;
   feasibility: "tight" | "workable" | "comfortable";
   warnings: string[];

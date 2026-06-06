@@ -40,10 +40,10 @@ describe("AuthControl", () => {
     expect(screen.getByRole("link", { name: /log in/i })).toHaveAttribute("href", "/auth");
   });
 
-  it("renders guest mode when Supabase is not configured", async () => {
+  it("renders account link when sign-in is not configured", async () => {
     vi.mocked(isSupabaseConfigured).mockReturnValue(false);
     render(<AuthControl />);
-    expect(screen.getByRole("link", { name: /guest mode/i })).toHaveAttribute("href", "/auth");
+    expect(screen.getByRole("link", { name: /account/i })).toHaveAttribute("href", "/auth");
   });
 
   it("imports guest trips after login", async () => {
@@ -55,10 +55,10 @@ describe("AuthControl", () => {
     render(<AuthPage />);
 
     await waitFor(() => expect(screen.getByText("traveler@example.com")).toBeInTheDocument());
-    await user.click(screen.getByRole("button", { name: /import guest trips/i }));
+    await user.click(screen.getByRole("button", { name: /add to account/i }));
 
     await waitFor(() => expect(upsertMock).toHaveBeenCalled());
     expect(window.localStorage.getItem("roamly.savedTrips")).toBeNull();
-    expect(screen.getByText(/imported 1 guest trip/i)).toBeInTheDocument();
+    expect(screen.getByText(/added 1 saved trip/i)).toBeInTheDocument();
   });
 });

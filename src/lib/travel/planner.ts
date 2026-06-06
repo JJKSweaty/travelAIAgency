@@ -1,6 +1,6 @@
 import { allocateBudget } from "./budget";
 import { isOpenRouterConfigured, OpenRouterItineraryGenerator } from "./ai";
-import { convertUsdFields, fromUsd, normalizeCurrency, toUsd } from "./currency";
+import { convertUsdFields, formatMoney, fromUsd, normalizeCurrency, toUsd } from "./currency";
 import { buildDayTransitPlans } from "./transit";
 import {
   type AttractionProvider,
@@ -113,7 +113,7 @@ export async function planTrip(request: TripRequest): Promise<TripPlan> {
     notes: [
       "Prices are planning estimates and should be verified before booking.",
       priceComparison.data[0].sourceNote,
-      destinations.source === "fallback" ? "Destination ranking uses curated trend seeds and supports custom free-text destinations." : "Destination ranking uses live trend data.",
+      "Destination ranking considers budget fit, trip style, and current travel appeal.",
       ...(destinations.warnings ?? []),
       ...budget.warnings
     ]
@@ -149,11 +149,17 @@ export async function refineTrip(plan: TripPlan, intent: RefinementIntent): Prom
   const nextRequest: TripRequest = { ...plan.request };
 
   if (intent === "cheaper") {
-    nextRequest.totalBudget = Math.max(250, Math.min(nextRequest.totalBudget, Math.round(plan.budget.totalEstimated * 0.92)));
+    nextRequest.totalBudget = Math.max(250, Math.min(nextRequest.totalBudget, Math.round(plan.budget.totalEstimated * 0.78)));
     nextRequest.preferredDestinationEnabled = false;
     nextRequest.destination = "";
     nextRequest.transportPreference = "public-transit";
+    nextRequest.cityTravelPreference = "public-transit";
     nextRequest.travelStyle = "relaxed";
+    nextRequest.tripLengthDays = Math.max(3, nextRequest.tripLengthDays > 4 ? nextRequest.tripLengthDays - 1 : nextRequest.tripLengthDays);
+    if (nextRequest.dateMode === "exact") {
+      nextRequest.dateMode = "month";
+      nextRequest.endDate = "";
+    }
     nextRequest.interests = Array.from(new Set([...nextRequest.interests, "budget"]));
     nextRequest.excludedDestinationIds = Array.from(new Set([...(nextRequest.excludedDestinationIds ?? []), plan.destination.id]));
     nextRequest.excludedHotelIds = [];
@@ -176,11 +182,45 @@ export async function refineTrip(plan: TripPlan, intent: RefinementIntent): Prom
   }
   if (intent === "regenerate") nextRequest.itineraryVariant = (nextRequest.itineraryVariant ?? 0) + 1;
 
-  const refined = await planTrip(nextRequest);
+  let refined = await planTrip(nextRequest);
+  if (intent === "cheaper" && refined.budget.totalEstimated > plan.budget.totalEstimated * 0.88) {
+    refined = await planTrip({
+      ...nextRequest,
+      totalBudget: Math.max(250, Math.round(nextRequest.totalBudget * 0.86)),
+      tripLengthDays: Math.max(3, nextRequest.tripLengthDays - 1),
+      excludedDestinationIds: Array.from(new Set([...(nextRequest.excludedDestinationIds ?? []), refined.destination.id]))
+    });
+  }
+
   return {
     ...refined,
-    notes: [`Refined for: ${intent.replace("-", " ")}.`, ...refined.notes]
+    notes: [...refinementNotes(intent, plan, refined), ...refined.notes]
   };
+}
+
+function refinementNotes(intent: RefinementIntent, previous: TripPlan, refined: TripPlan) {
+  if (intent !== "cheaper") return [`Refined for: ${intent.replace("-", " ")}.`];
+
+  const currency = refined.request.currency;
+  const savings = Math.max(0, previous.budget.totalEstimated - refined.budget.totalEstimated);
+  const destinationChanged = previous.destination.id !== refined.destination.id;
+  const daysChanged = previous.request.tripLengthDays !== refined.request.tripLengthDays;
+  const dateChanged = previous.request.dateMode === "exact" && refined.request.dateMode === "month";
+  const hotel = refined.hotels[0];
+  const flight = refined.priceComparison.flights[0];
+  const tradeoffs = [
+    destinationChanged ? `different destination (${refined.destination.name})` : "same destination with lower-cost choices",
+    daysChanged ? `${refined.request.tripLengthDays} trip days` : "same trip length",
+    dateChanged ? "more flexible month search instead of exact dates" : "flexible timing where available",
+    "public transit over car-first planning",
+    hotel ? `value stay around ${formatMoney(hotel.nightlyPrice, currency)}/night` : "value stay package",
+    flight ? `flight package around ${formatMoney(flight.estimatedPrice, currency)}` : "lower fare package"
+  ];
+
+  return [
+    `A cheaper search found ${savings > 0 ? `${formatMoney(savings, currency)} in estimated savings` : "a lower-cost package mix"} compared with the previous plan.`,
+    `Tradeoffs: ${tradeoffs.join("; ")}.`
+  ];
 }
 
 export function providerHealth() {

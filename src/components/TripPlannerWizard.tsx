@@ -3,8 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Route, Sparkles, Users, WalletCards } from "lucide-react";
+import { readCurrencyPreference } from "@/components/CurrencySelector";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { writeCurrentTrip } from "@/lib/travel/storage";
-import { currencyOptions, formatMoney } from "@/lib/travel/currency";
+import { formatMoney } from "@/lib/travel/currency";
 import type { CityTravelPreference, CurrencyCode, Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
 
 const interestOptions: { id: Interest; label: string }[] = [
@@ -44,7 +49,7 @@ const trackerSplits = {
 
 export function TripPlannerWizard() {
   const router = useRouter();
-  const [request, setRequest] = useState<TripRequest>(initialRequest);
+  const [request, setRequest] = useState<TripRequest>(() => ({ ...initialRequest, currency: readCurrencyPreference() ?? initialRequest.currency }));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [originSuggestions, setOriginSuggestions] = useState<LocationOption[]>([]);
@@ -57,6 +62,16 @@ export function TripPlannerWizard() {
 
   useLocationSuggestions(request.origin, true, "origin", setOriginSuggestions);
   useLocationSuggestions(request.destination ?? "", request.preferredDestinationEnabled, "destination", setDestinationSuggestions);
+
+  useEffect(() => {
+    function handleCurrency(event: Event) {
+      const next = (event as CustomEvent<CurrencyCode>).detail;
+      setRequest((current) => ({ ...current, currency: next }));
+    }
+
+    window.addEventListener("roamly:currency-change", handleCurrency);
+    return () => window.removeEventListener("roamly:currency-change", handleCurrency);
+  }, []);
 
   function toggleInterest(interest: Interest) {
     setRequest((current) => {
@@ -87,7 +102,7 @@ export function TripPlannerWizard() {
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-10 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8">
+    <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-10 pt-2 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8">
       <div className="glass-panel overflow-hidden rounded-lg">
         <div className="relative min-h-[260px] bg-ink p-6 text-paper sm:p-8">
           <div
@@ -101,21 +116,20 @@ export function TripPlannerWizard() {
           />
           <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/70 to-transparent" />
           <div className="relative max-w-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Roamly planner</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Trip finder</p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight sm:text-6xl">Shape a trip around your budget.</h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-paper/78">
-              Choose a destination or let Roamly find a strong fit, then balance stays, transport, food, activities, and daily routes.
+              Choose a destination or let Roamly find a strong fit, then compare stays, flights, food, activities, and daily routes in one plan.
             </p>
           </div>
         </div>
 
         <div className="grid gap-6 p-5 sm:p-8">
           <StepSection step="Step 1" title="Route" icon={<Compass size={17} />}>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_220px]">
+            <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Origin" icon={<Plane size={17} />}>
                 <div className="relative">
-                  <input
-                    className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
+                  <Input
                     value={request.origin}
                     role="combobox"
                     aria-expanded={showOriginSuggestions}
@@ -141,34 +155,26 @@ export function TripPlannerWizard() {
                 </div>
               </Field>
               <Field label="Destination mode" icon={<MapPin size={17} />}>
-                <button
-                  className="focus-ring flex w-full items-center justify-between rounded-lg border border-ink/10 bg-white px-3 py-3 text-left"
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 w-full justify-between bg-white"
                   onClick={() => {
                     const preferredDestinationEnabled = !request.preferredDestinationEnabled;
                     setRequest({ ...request, preferredDestinationEnabled });
                     if (!preferredDestinationEnabled) setDestinationSuggestions([]);
                   }}
                 >
-                  {request.preferredDestinationEnabled ? "Use my destination" : "Find trending/hot"}
+                  {request.preferredDestinationEnabled ? "Use my destination" : "Find a smart match"}
                   <Sparkles size={16} className="text-coral" aria-hidden />
-                </button>
-              </Field>
-              <Field label="Currency" icon={<DollarSign size={17} />}>
-                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={currency} onChange={(event) => setRequest({ ...request, currency: event.target.value as CurrencyCode })}>
-                  {currencyOptions.map((option) => (
-                    <option key={option.code} value={option.code}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                </Button>
               </Field>
             </div>
 
             {request.preferredDestinationEnabled ? (
               <Field label="Preferred destination" icon={<Compass size={17} />}>
                 <div className="relative">
-                  <input
-                    className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3"
+                  <Input
                     placeholder="Lisbon, Nairobi, Sapporo..."
                     value={request.destination}
                     role="combobox"
@@ -216,22 +222,22 @@ export function TripPlannerWizard() {
             {request.dateMode === "exact" ? (
               <>
                 <Field label="Depart" icon={<CalendarDays size={17} />}>
-                  <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="date" value={request.startDate ?? ""} onChange={(event) => setRequest(syncExactStartDate(request, event.target.value))} />
+                  <Input type="date" value={request.startDate ?? ""} onChange={(event) => setRequest(syncExactStartDate(request, event.target.value))} />
                 </Field>
                 <Field label="Return" icon={<CalendarDays size={17} />}>
-                  <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="date" value={request.endDate ?? ""} onChange={(event) => setRequest(syncExactEndDate(request, event.target.value))} />
+                  <Input type="date" value={request.endDate ?? ""} onChange={(event) => setRequest(syncExactEndDate(request, event.target.value))} />
                 </Field>
               </>
             ) : (
               <Field label="Travel month" icon={<CalendarDays size={17} />}>
-                <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="month" value={request.startDate ?? ""} onChange={(event) => setRequest({ ...request, dateMode: "month", startDate: event.target.value, endDate: "" })} />
+                <Input type="month" value={request.startDate ?? ""} onChange={(event) => setRequest({ ...request, dateMode: "month", startDate: event.target.value, endDate: "" })} />
               </Field>
             )}
             <Field label="Trip length" icon={<CalendarDays size={17} />}>
-              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={1} max={21} value={request.tripLengthDays} onChange={(event) => setRequest(syncTripLength(request, Number(event.target.value)))} />
+              <Input type="number" min={1} max={21} value={request.tripLengthDays} onChange={(event) => setRequest(syncTripLength(request, Number(event.target.value)))} />
             </Field>
             <Field label="Travelers" icon={<Users size={17} />}>
-              <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={1} max={12} value={request.travelers} onChange={(event) => setRequest({ ...request, travelers: Number(event.target.value) })} />
+              <Input type="number" min={1} max={12} value={request.travelers} onChange={(event) => setRequest({ ...request, travelers: Number(event.target.value) })} />
             </Field>
             </div>
           </StepSection>
@@ -239,30 +245,39 @@ export function TripPlannerWizard() {
           <StepSection step="Step 3" title="Budget and pace" icon={<WalletCards size={17} />}>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Total budget" icon={<DollarSign size={17} />}>
-                <input className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" type="number" min={250} step={50} value={request.totalBudget} onChange={(event) => setRequest({ ...request, totalBudget: Number(event.target.value) })} />
+                <Input type="number" min={250} step={50} value={request.totalBudget} onChange={(event) => setRequest({ ...request, totalBudget: Number(event.target.value) })} />
               </Field>
               <Field label="Travel style" icon={<Sparkles size={17} />}>
-                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.travelStyle} onChange={(event) => setRequest({ ...request, travelStyle: event.target.value as TravelStyle })}>
-                  <option value="relaxed">Relaxed</option>
-                  <option value="balanced">Balanced</option>
-                  <option value="packed">Packed</option>
-                </select>
+                <Select value={request.travelStyle} onValueChange={(value) => setRequest({ ...request, travelStyle: value as TravelStyle })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="relaxed">Relaxed</SelectItem>
+                    <SelectItem value="balanced">Balanced</SelectItem>
+                    <SelectItem value="packed">Packed</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label="Transport" icon={<Car size={17} />}>
-                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.transportPreference} onChange={(event) => setRequest({ ...request, transportPreference: event.target.value as TransportPreference })}>
-                  <option value="flexible">Flexible</option>
-                  <option value="rental-car">Rental car</option>
-                  <option value="public-transit">Transit/rideshare</option>
-                </select>
+                <Select value={request.transportPreference} onValueChange={(value) => setRequest({ ...request, transportPreference: value as TransportPreference })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="flexible">Flexible</SelectItem>
+                    <SelectItem value="rental-car">Rental car</SelectItem>
+                    <SelectItem value="public-transit">Transit/rideshare</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label="In-city travel" icon={<Route size={17} />}>
-                <select className="focus-ring w-full rounded-lg border border-ink/10 bg-white px-3 py-3" value={request.cityTravelPreference ?? "mixed"} onChange={(event) => setRequest({ ...request, cityTravelPreference: event.target.value as CityTravelPreference })}>
-                  <option value="mixed">Mixed</option>
-                  <option value="walkable">Walkable</option>
-                  <option value="public-transit">Public transit</option>
-                  <option value="rideshare">Rideshare</option>
-                  <option value="rental-car">Rental car</option>
-                </select>
+                <Select value={request.cityTravelPreference ?? "mixed"} onValueChange={(value) => setRequest({ ...request, cityTravelPreference: value as CityTravelPreference })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mixed">Mixed</SelectItem>
+                    <SelectItem value="walkable">Walkable</SelectItem>
+                    <SelectItem value="public-transit">Public transit</SelectItem>
+                    <SelectItem value="rideshare">Rideshare</SelectItem>
+                    <SelectItem value="rental-car">Rental car</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
           </StepSection>
@@ -275,6 +290,7 @@ export function TripPlannerWizard() {
             <div className="flex flex-wrap gap-2">
               {interestOptions.map((interest) => (
                 <button
+                  type="button"
                   key={interest.id}
                   className={`focus-ring rounded-lg border px-3 py-2 text-sm font-medium transition ${
                     request.interests.includes(interest.id) ? "border-reef bg-reef text-white" : "border-ink/10 bg-white text-ink/70 hover:border-reef/40"
@@ -289,24 +305,26 @@ export function TripPlannerWizard() {
 
           {error ? <p className="rounded-lg bg-coral/10 px-4 py-3 text-sm font-medium text-coral">{error}</p> : null}
 
-          <button className="focus-ring rounded-lg bg-ink px-5 py-4 font-semibold text-paper transition hover:bg-reef disabled:cursor-not-allowed disabled:opacity-60" onClick={submit} disabled={isLoading}>
+          <Button className="h-13 py-4 text-base" onClick={submit} disabled={isLoading}>
             {isLoading ? "Planning trip..." : "Generate trip plan"}
-          </button>
+          </Button>
         </div>
       </div>
 
       <aside className="grid content-start gap-4">
         <LiveBudgetTracker tracker={budgetTracker} currency={currency} />
-        <div className="rounded-lg bg-white/70 p-5 shadow-soft">
+        <Card>
+          <CardContent className="p-5">
           <p className="text-sm font-semibold text-ink">What Roamly returns</p>
           <div className="mt-4 grid gap-3 text-sm text-ink/70">
-            <span>Hotel short list with booking links</span>
-            <span>Car or transit estimate</span>
+            <span>Hotel and flight comparison pages</span>
+            <span>Transport options for the destination</span>
             <span>Restaurants and popular places</span>
             <span>Day-by-day itinerary with costs</span>
-            <span>Two alternates when budget allows</span>
+            <span>Cheaper alternates when the budget is tight</span>
           </div>
-        </div>
+          </CardContent>
+        </Card>
       </aside>
     </section>
   );
@@ -434,7 +452,7 @@ function parseDateOnly(value: string) {
 function Field({ label, icon, children }: { label: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-ink/70">
+      <span className="mb-2 flex items-center gap-2 text-sm font-semibold leading-none text-ink/72">
         {icon}
         {label}
       </span>

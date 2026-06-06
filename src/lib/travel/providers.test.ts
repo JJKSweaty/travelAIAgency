@@ -58,6 +58,6 @@ describe("destination providers", () => {
     const provider = new FallbackDestinationTrendProvider();
     const result = await provider.findDestinations({ ...request, destination: "Atlantis" });
     expect(result.data[0].name).toBe("Atlantis");
-    expect(result.warnings?.[0]).toContain("custom global destination");
+    expect(result.warnings?.[0]).toContain("broader market estimates");
   });
 });

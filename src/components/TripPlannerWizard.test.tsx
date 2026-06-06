@@ -47,7 +47,6 @@ describe("TripPlannerWizard", () => {
     expect(screen.getByLabelText(/origin/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/travel month/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/total budget/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/currency/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/in-city travel/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /generate trip plan/i })).toBeInTheDocument();
   });
