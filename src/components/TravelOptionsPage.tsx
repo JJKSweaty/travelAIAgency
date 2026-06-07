@@ -136,7 +136,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         loading: false,
         searched: true,
         links: kind === "flights" ? fallbackFlightLinksForPlan(plan) : fallbackHotelLinksForPlan(plan),
-        message: "Choose a travel month so I can find realistic flight and hotel prices."
+        message: "Choose exact depart and return dates so I can find realistic flight and hotel prices."
       });
       return;
     }
@@ -169,18 +169,14 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         const flights = Array.isArray(body.flights) ? body.flights : [];
         setFlightResults(flights);
         setHotelResults([]);
-        if (flights.length) {
-          writeBrowserSearchCache({ kind: "flights", key: request.searchKey, fetchedAt, results: flights });
-          persistProviderCache({ kind: "flights", plan, searchKey: request.searchKey, fetchedAt, flights });
-        }
+        writeBrowserSearchCache({ kind: "flights", key: request.searchKey, fetchedAt, results: flights });
+        persistProviderCache({ kind: "flights", plan, searchKey: request.searchKey, fetchedAt, flights });
       } else {
         const hotels = Array.isArray(body.hotels) ? body.hotels : [];
         setHotelResults(hotels);
         setFlightResults([]);
-        if (hotels.length) {
-          writeBrowserSearchCache({ kind: "hotels", key: request.searchKey, fetchedAt, results: hotels });
-          persistProviderCache({ kind: "hotels", plan, searchKey: request.searchKey, fetchedAt, hotels });
-        }
+        writeBrowserSearchCache({ kind: "hotels", key: request.searchKey, fetchedAt, results: hotels });
+        persistProviderCache({ kind: "hotels", plan, searchKey: request.searchKey, fetchedAt, hotels });
       }
 
       setProviderSearch({ loading: false, searched: true, links: nextLinks, message: body.message });
@@ -211,7 +207,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
           loading: false,
           searched: true,
           links,
-          message: "Choose a travel month so I can find realistic flight and hotel prices."
+          message: "Choose exact depart and return dates so I can find realistic flight and hotel prices."
         });
         setFlightResults([]);
         setHotelResults([]);
@@ -1302,20 +1298,10 @@ function fallbackHotelLinksForPlan(plan: TripPlan): ProviderSearchLink[] {
 }
 
 function providerTravelDates(plan: TripPlan) {
-  if (isDateOnly(plan.request.startDate)) {
+  if (plan.request.dateMode === "exact" && isDateOnly(plan.request.startDate) && isDateOnly(plan.request.endDate) && plan.request.endDate > plan.request.startDate) {
     return {
       departureDate: plan.request.startDate,
-      returnDate: isDateOnly(plan.request.endDate) ? plan.request.endDate : addDays(plan.request.startDate, Math.max(1, plan.request.tripLengthDays - 1))
-    };
-  }
-
-  const monthMatch = /^(\d{4})-(\d{2})$/.exec(plan.request.startDate ?? "");
-  if (monthMatch) {
-    const [, year, month] = monthMatch;
-    const departureDate = `${year}-${month}-15`;
-    return {
-      departureDate,
-      returnDate: addDays(departureDate, Math.max(1, plan.request.tripLengthDays - 1))
+      returnDate: plan.request.endDate
     };
   }
 
@@ -1332,8 +1318,15 @@ function airportIdFor(value: string) {
   const normalized = value.trim().toLowerCase();
   const airportCodes: Record<string, string> = {
     toronto: "YYZ",
+    montreal: "YUL",
     lisbon: "LIS",
     "mexico city": "MEX",
+    cancun: "CUN",
+    "los cabos": "SJD",
+    "cabo san lucas": "SJD",
+    varadero: "VRA",
+    "punta cana": "PUJ",
+    bali: "DPS",
     kyoto: "KIX",
     tokyo: "TYO",
     vancouver: "YVR",
@@ -1370,13 +1363,6 @@ function airportIdFor(value: string) {
 
 function isDateOnly(value?: string): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
-}
-
-function addDays(value: string, days: number) {
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 function dateSummary(plan: TripPlan) {

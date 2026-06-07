@@ -24,6 +24,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Missing required flight search parameters" }, { status: 400 });
   }
 
+  if (!isDateOnly(departureDate) || (returnDate && !isDateOnly(returnDate))) {
+    return NextResponse.json({ error: "Exact flight dates are required for live fare searches" }, { status: 400 });
+  }
+
   const links = flightFallbackLinks({ origin, destination, departureDate, returnDate, adults, currency });
   const cacheKey = travelCacheKey("flights", { origin, destination, travelMonth, departureDate, returnDate, tripLengthDays, adults, budget, currency, travelClass });
   const cached = getTravelCache<FlightRouteResponse>(cacheKey);
@@ -36,7 +40,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       flights: [],
       links,
-      message: "I could not check current flight prices here. Use a search link for current fares."
+      message: "Live flight providers are not configured. Use a provider search link for current fares."
     });
   }
 
@@ -91,4 +95,8 @@ function optionalPositiveInt(value: string | null) {
 
 function currencyParam(value: string | null): CurrencyCode {
   return SUPPORTED_CURRENCIES.has(value ?? "") ? (value as CurrencyCode) : "CAD";
+}
+
+function isDateOnly(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }

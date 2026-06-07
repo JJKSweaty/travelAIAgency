@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { refineTrip } from "@/lib/travel/planner";
 import { refinementSchema } from "@/lib/travel/schema";
-import { hasTravelMonth, travelMonthRequiredMessage } from "@/lib/travel/travelDates";
+import { exactTravelDatesRequiredMessage, hasExactTravelDates } from "@/lib/travel/travelDates";
 import type { TripPlan } from "@/lib/travel/types";
 
 export async function POST(request: Request) {
@@ -13,8 +13,8 @@ export async function POST(request: Request) {
   }
 
   const sourcePlan = parsed.data.plan as TripPlan;
-  if (!hasTravelMonth(sourcePlan.request)) {
-    return NextResponse.json({ error: travelMonthRequiredMessage }, { status: 400 });
+  if (!hasExactTravelDates(sourcePlan.request)) {
+    return NextResponse.json({ error: exactTravelDatesRequiredMessage }, { status: 400 });
   }
 
   const plan = await refineTrip(sourcePlan, parsed.data.intent);

@@ -1,3 +1,4 @@
+import { estimateRoundTripFlightCost } from "./costEstimates";
 import type { AttractionOption, CarOption, DestinationOption, HotelOption, Interest, PriceQuote, RestaurantOption, TripRequest } from "./types";
 
 export const destinations: DestinationOption[] = [
@@ -28,6 +29,76 @@ export const destinations: DestinationOption[] = [
     averageDailyFood: 45,
     averageDailyActivities: 38,
     bookingLink: "https://www.google.com/travel/explore?q=Mexico%20City"
+  },
+  {
+    id: "cancun",
+    name: "Cancun",
+    country: "Mexico",
+    summary: "Caribbean beaches, frequent North American flights, resort zones, cenotes, and flexible hotel package value.",
+    imageUrl: "https://images.unsplash.com/photo-1682686580224-cd46ea1a6950?auto=format&fit=crop&w=1400&q=80",
+    costLevel: 2,
+    trendingScore: 92,
+    bestFor: ["beaches", "budget", "family", "nightlife"],
+    averageNightlyHotel: 118,
+    averageDailyFood: 42,
+    averageDailyActivities: 38,
+    bookingLink: "https://www.google.com/travel/explore?q=Cancun%20Mexico"
+  },
+  {
+    id: "los-cabos",
+    name: "Los Cabos",
+    country: "Mexico",
+    summary: "Beach resorts, desert coast scenery, boat trips, and package-friendly hotels around Cabo San Lucas and San Jose del Cabo.",
+    imageUrl: "https://images.unsplash.com/photo-1584464491033-06628f3a6b7b?auto=format&fit=crop&w=1400&q=80",
+    costLevel: 3,
+    trendingScore: 88,
+    bestFor: ["beaches", "food", "family", "budget"],
+    averageNightlyHotel: 145,
+    averageDailyFood: 52,
+    averageDailyActivities: 48,
+    bookingLink: "https://www.google.com/travel/explore?q=Los%20Cabos%20Mexico"
+  },
+  {
+    id: "varadero",
+    name: "Varadero",
+    country: "Cuba",
+    summary: "Simple beach-focused resort trips, all-inclusive package potential, and strong value when dates line up from Canada.",
+    imageUrl: "https://images.unsplash.com/photo-1589891685392-319900e9f544?auto=format&fit=crop&w=1400&q=80",
+    costLevel: 1,
+    trendingScore: 83,
+    bestFor: ["beaches", "budget", "family"],
+    averageNightlyHotel: 86,
+    averageDailyFood: 28,
+    averageDailyActivities: 24,
+    bookingLink: "https://www.google.com/travel/explore?q=Varadero%20Cuba"
+  },
+  {
+    id: "punta-cana",
+    name: "Punta Cana",
+    country: "Dominican Republic",
+    summary: "All-inclusive beach resorts, direct seasonal flights, warm water, and easy low-friction package planning.",
+    imageUrl: "https://images.unsplash.com/photo-1518509562904-e7ef99cdcc86?auto=format&fit=crop&w=1400&q=80",
+    costLevel: 2,
+    trendingScore: 90,
+    bestFor: ["beaches", "budget", "family", "luxury"],
+    averageNightlyHotel: 110,
+    averageDailyFood: 34,
+    averageDailyActivities: 32,
+    bookingLink: "https://www.google.com/travel/explore?q=Punta%20Cana%20Dominican%20Republic"
+  },
+  {
+    id: "montreal",
+    name: "Montreal",
+    country: "Canada",
+    summary: "Short-haul city break value with food neighborhoods, festivals, museums, walkability, and lower flight risk from Canadian origins.",
+    imageUrl: "https://images.unsplash.com/photo-1519178614-68673b201f36?auto=format&fit=crop&w=1400&q=80",
+    costLevel: 3,
+    trendingScore: 89,
+    bestFor: ["food", "museums", "nightlife", "budget"],
+    averageNightlyHotel: 145,
+    averageDailyFood: 58,
+    averageDailyActivities: 42,
+    bookingLink: "https://www.google.com/travel/explore?q=Montreal%20Canada"
   },
   {
     id: "kyoto",
@@ -224,6 +295,20 @@ export const destinations: DestinationOption[] = [
     averageDailyFood: 34,
     averageDailyActivities: 32,
     bookingLink: "https://www.google.com/travel/explore?q=Bangkok%20Thailand"
+  },
+  {
+    id: "bali",
+    name: "Bali",
+    country: "Indonesia",
+    summary: "Long-haul but strong on-the-ground value with beaches, villas, food, nature, and flexible stays around Ubud and the coast.",
+    imageUrl: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=1400&q=80",
+    costLevel: 2,
+    trendingScore: 93,
+    bestFor: ["beaches", "nature", "budget", "adventure"],
+    averageNightlyHotel: 82,
+    averageDailyFood: 28,
+    averageDailyActivities: 30,
+    bookingLink: "https://www.google.com/travel/explore?q=Bali%20Indonesia"
   },
   {
     id: "new-orleans",
@@ -480,7 +565,7 @@ export function hotelsFor(destination: DestinationOption, request?: TripRequest)
 
 export function flightQuotesFor(destination: DestinationOption, request: TripRequest): PriceQuote[] {
   const route = flightSearchText(destination, request);
-  const base = Math.round((destination.costLevel * 115 + destination.trendingScore * 2.4) * request.travelers);
+  const base = estimateRoundTripFlightCost(request, destination);
   const links = [
     { provider: "google-flights", displayName: "Date-aware flight search", factor: 0.96, link: `https://www.google.com/travel/flights?q=${encodeURIComponent(route)}`, linkLabel: hasExactDates(request) ? "Open date-aware flight search" : "Open flight search" },
     { provider: "kayak", displayName: "Flexible fare search", factor: 1.02, link: `https://www.kayak.com/flights`, linkLabel: "Open flight search" }

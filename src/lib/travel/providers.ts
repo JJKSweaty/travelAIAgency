@@ -508,7 +508,7 @@ type GooglePlacePhotoResponse = {
 
 async function googlePlacePhotoUrl(photoName: string, apiKey: string) {
   const url = new URL(`https://places.googleapis.com/v1/${photoName}/media`);
-  url.searchParams.set("maxWidthPx", "900");
+  url.searchParams.set("maxWidthPx", "1600");
   url.searchParams.set("skipHttpRedirect", "true");
   const response = await fetch(url, { headers: { "X-Goog-Api-Key": apiKey } });
   if (!response.ok) return undefined;
@@ -641,8 +641,15 @@ function airportCodeFor(value?: string) {
   if (codeMatch) return codeMatch[0];
   const airportCodes: Record<string, string> = {
     toronto: "YYZ",
+    montreal: "YUL",
     lisbon: "LIS",
     "mexico city": "MEX",
+    cancun: "CUN",
+    "los cabos": "SJD",
+    "cabo san lucas": "SJD",
+    varadero: "VRA",
+    "punta cana": "PUJ",
+    bali: "DPS",
     kyoto: "KIX",
     tokyo: "TYO",
     vancouver: "YVR",
@@ -678,17 +685,11 @@ function airportCodeFor(value?: string) {
 }
 
 function searchDates(request: TripRequest) {
-  if (request.dateMode === "exact" && isDateOnly(request.startDate)) {
+  if (request.dateMode === "exact" && isDateOnly(request.startDate) && isDateOnly(request.endDate) && request.endDate > request.startDate) {
     return {
       departureDate: request.startDate,
-      returnDate: isDateOnly(request.endDate) ? request.endDate : addDays(request.startDate, Math.max(1, request.tripLengthDays - 1))
+      returnDate: request.endDate
     };
-  }
-  const monthMatch = /^(\d{4})-(\d{2})$/.exec(request.startDate ?? "");
-  if (monthMatch) {
-    const [, year, month] = monthMatch;
-    const departureDate = `${year}-${month}-15`;
-    return { departureDate, returnDate: addDays(departureDate, Math.max(1, request.tripLengthDays - 1)) };
   }
   return null;
 }
@@ -715,13 +716,6 @@ function parseIsoDuration(value?: string) {
 
 function segmentDurationMinutes(start: string, end: string) {
   return Math.max(1, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
-}
-
-function addDays(value: string, days: number) {
-  const [year, month, day] = value.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
 }
 
 function isDateOnly(value?: string): value is string {

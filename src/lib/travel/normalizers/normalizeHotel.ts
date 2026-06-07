@@ -11,7 +11,7 @@ export function normalizeSerpApiHotel(property: SerpApiHotelProperty, index: num
   const fetchedAt = params.fetchedAt ?? new Date().toISOString();
   const pricePerNight = numberFrom(property.rate_per_night?.extracted_lowest ?? property.rate_per_night?.lowest);
   const totalPrice = numberFrom(property.total_rate?.extracted_lowest ?? property.total_rate?.lowest);
-  const imageUrl = property.images?.[0]?.thumbnail ?? property.images?.[0]?.original_image ?? property.thumbnail ?? null;
+  const imageUrl = property.images?.find((image) => image.original_image)?.original_image ?? property.images?.find((image) => image.thumbnail)?.thumbnail ?? property.thumbnail ?? null;
   const result: HotelResult = {
     id: `serpapi-hotel-${property.property_token ?? stableId(`${property.name ?? ""}-${index}`)}`,
     source: "SerpApi Google Hotels",

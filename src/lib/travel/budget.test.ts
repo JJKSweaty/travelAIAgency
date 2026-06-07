@@ -22,7 +22,7 @@ describe("allocateBudget", () => {
   });
 
   it("marks medium budgets as workable", () => {
-    const budget = allocateBudget({ ...baseRequest, totalBudget: 1700 }, destinations[0]);
+    const budget = allocateBudget({ ...baseRequest, totalBudget: 3000 }, destinations[0]);
     expect(budget.feasibility).toBe("workable");
     expect(budget.totalEstimated).toBeGreaterThan(0);
   });

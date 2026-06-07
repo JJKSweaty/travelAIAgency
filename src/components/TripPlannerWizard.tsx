@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { writeCurrentTrip } from "@/lib/travel/storage";
 import { formatMoney } from "@/lib/travel/currency";
 import { rememberRecentLocation } from "@/lib/travel/locationSearch";
-import { hasTravelMonth, travelMonthFromRequest, travelMonthRequiredMessage } from "@/lib/travel/travelDates";
+import { exactTravelDatesRequiredMessage, hasExactTravelDates, travelMonthFromRequest } from "@/lib/travel/travelDates";
 import type { CityTravelPreference, CurrencyCode, Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
 
 const interestOptions: { id: Interest; label: string }[] = [
@@ -31,7 +31,7 @@ const initialRequest: TripRequest = {
   origin: "Toronto",
   preferredDestinationEnabled: false,
   destination: "",
-  dateMode: "month",
+  dateMode: "exact",
   startDate: "",
   endDate: "",
   tripLengthDays: 5,
@@ -87,8 +87,8 @@ export function TripPlannerWizard() {
   }
 
   async function submit() {
-    if (!hasTravelMonth(request)) {
-      setError(travelMonthRequiredMessage);
+    if (!hasExactTravelDates(request)) {
+      setError(exactTravelDatesRequiredMessage);
       return;
     }
 
@@ -138,7 +138,47 @@ export function TripPlannerWizard() {
         </div>
 
         <div className="grid gap-6 p-5 sm:p-8">
-          <StepSection step="Step 1" title="Route" icon={<Compass size={17} />}>
+          <StepSection step="Step 1" title="Budget and pace" icon={<WalletCards size={17} />}>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="Total budget" icon={<DollarSign size={17} />}>
+                <Input type="number" min={250} step={50} value={request.totalBudget} onChange={(event) => setRequest({ ...request, totalBudget: Number(event.target.value) })} />
+              </Field>
+              <Field label="Travel style" icon={<Gauge size={17} />}>
+                <Select value={request.travelStyle} onValueChange={(value) => setRequest({ ...request, travelStyle: value as TravelStyle })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="relaxed">Relaxed</SelectItem>
+                    <SelectItem value="balanced">Balanced</SelectItem>
+                    <SelectItem value="packed">Packed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Transport" icon={<Car size={17} />}>
+                <Select value={request.transportPreference} onValueChange={(value) => setRequest({ ...request, transportPreference: value as TransportPreference })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="flexible">Flexible</SelectItem>
+                    <SelectItem value="rental-car">Rental car</SelectItem>
+                    <SelectItem value="public-transit">Transit/rideshare</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="In-city travel" icon={<Route size={17} />}>
+                <Select value={request.cityTravelPreference ?? "mixed"} onValueChange={(value) => setRequest({ ...request, cityTravelPreference: value as CityTravelPreference })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mixed">Mixed</SelectItem>
+                    <SelectItem value="walkable">Walkable</SelectItem>
+                    <SelectItem value="public-transit">Public transit</SelectItem>
+                    <SelectItem value="rideshare">Rideshare</SelectItem>
+                    <SelectItem value="rental-car">Rental car</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+          </StepSection>
+
+          <StepSection step="Step 2" title="Route" icon={<Compass size={17} />}>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="Origin" icon={<Plane size={17} />}>
                 <div className="relative">
@@ -220,7 +260,7 @@ export function TripPlannerWizard() {
             ) : null}
           </StepSection>
 
-          <StepSection step="Step 2" title="Dates and travelers" icon={<CalendarDays size={17} />}>
+          <StepSection step="Step 3" title="Dates and travelers" icon={<CalendarDays size={17} />}>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Date mode" icon={<CalendarDays size={17} />}>
               <div className="grid grid-cols-2 rounded-lg border border-ink/10 bg-white p-1">
@@ -256,46 +296,6 @@ export function TripPlannerWizard() {
             <Field label="Travelers" icon={<Users size={17} />}>
               <Input type="number" min={1} max={12} value={request.travelers} onChange={(event) => setRequest({ ...request, travelers: Number(event.target.value) })} />
             </Field>
-            </div>
-          </StepSection>
-
-          <StepSection step="Step 3" title="Budget and pace" icon={<WalletCards size={17} />}>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="Total budget" icon={<DollarSign size={17} />}>
-                <Input type="number" min={250} step={50} value={request.totalBudget} onChange={(event) => setRequest({ ...request, totalBudget: Number(event.target.value) })} />
-              </Field>
-              <Field label="Travel style" icon={<Gauge size={17} />}>
-                <Select value={request.travelStyle} onValueChange={(value) => setRequest({ ...request, travelStyle: value as TravelStyle })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="relaxed">Relaxed</SelectItem>
-                    <SelectItem value="balanced">Balanced</SelectItem>
-                    <SelectItem value="packed">Packed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Transport" icon={<Car size={17} />}>
-                <Select value={request.transportPreference} onValueChange={(value) => setRequest({ ...request, transportPreference: value as TransportPreference })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="flexible">Flexible</SelectItem>
-                    <SelectItem value="rental-car">Rental car</SelectItem>
-                    <SelectItem value="public-transit">Transit/rideshare</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="In-city travel" icon={<Route size={17} />}>
-                <Select value={request.cityTravelPreference ?? "mixed"} onValueChange={(value) => setRequest({ ...request, cityTravelPreference: value as CityTravelPreference })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mixed">Mixed</SelectItem>
-                    <SelectItem value="walkable">Walkable</SelectItem>
-                    <SelectItem value="public-transit">Public transit</SelectItem>
-                    <SelectItem value="rideshare">Rideshare</SelectItem>
-                    <SelectItem value="rental-car">Rental car</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
             </div>
           </StepSection>
 
@@ -569,9 +569,9 @@ function LiveBudgetTracker({ tracker, currency }: { tracker: BudgetTracker; curr
 
 function LiveSearchReadiness({ request }: { request: TripRequest }) {
   const travelMonth = travelMonthFromRequest(request);
-  const exactDates = request.dateMode === "exact" && Boolean(request.startDate && request.endDate);
+  const exactDates = hasExactTravelDates(request);
   const destinationReady = !request.preferredDestinationEnabled || Boolean(request.destination?.trim());
-  const ready = Boolean(travelMonth && destinationReady);
+  const ready = Boolean(exactDates && destinationReady);
 
   return (
     <Card>
@@ -579,15 +579,15 @@ function LiveSearchReadiness({ request }: { request: TripRequest }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="text-lg">Flight and stay search</CardTitle>
-            <CardDescription>{ready ? "Current price checks can run from the comparison pages." : "Choose a travel month before building a plan."}</CardDescription>
+            <CardDescription>{ready ? "Current price checks can run from the comparison pages." : "Choose exact dates before building a plan."}</CardDescription>
           </div>
           <Badge variant={ready ? "default" : "secondary"}>{ready ? "Ready" : "Planning"}</Badge>
         </div>
       </CardHeader>
       <CardContent className="grid gap-2 text-sm">
-        <ReadinessRow icon={<CalendarDays size={15} />} label="Dates" value={exactDates ? `${request.startDate} to ${request.endDate}` : travelMonth ?? "Choose month"} ready={Boolean(travelMonth)} />
-        <ReadinessRow icon={<Plane size={15} />} label="Flights" value={travelMonth ? "Fare check ready" : "Choose month"} ready={Boolean(travelMonth)} />
-        <ReadinessRow icon={<Hotel size={15} />} label="Hotels" value={travelMonth ? "Rate check ready" : "Choose month"} ready={Boolean(travelMonth)} />
+        <ReadinessRow icon={<CalendarDays size={15} />} label="Dates" value={exactDates ? `${request.startDate} to ${request.endDate}` : travelMonth ?? "Choose exact dates"} ready={exactDates} />
+        <ReadinessRow icon={<Plane size={15} />} label="Flights" value={exactDates ? "Fare check ready" : "Choose exact dates"} ready={exactDates} />
+        <ReadinessRow icon={<Hotel size={15} />} label="Hotels" value={exactDates ? "Rate check ready" : "Choose exact dates"} ready={exactDates} />
         <ReadinessRow icon={<Search size={15} />} label="Destination" value={destinationReady ? "Ready" : "Choose a destination"} ready={destinationReady} />
       </CardContent>
     </Card>

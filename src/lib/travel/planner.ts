@@ -1,7 +1,7 @@
 import { allocateBudget } from "./budget";
 import { isOpenRouterConfigured, OpenRouterItineraryGenerator } from "./ai";
 import { convertUsdFields, formatMoney, fromUsd, normalizeCurrency, toUsd } from "./currency";
-import { hasTravelMonth, travelMonthRequiredMessage } from "./travelDates";
+import { exactTravelDatesRequiredMessage, hasExactTravelDates } from "./travelDates";
 import { buildDayTransitPlans } from "./transit";
 import {
   type AttractionProvider,
@@ -31,8 +31,8 @@ const travelPriceProvider: TravelPriceProvider = new CascadingTravelPriceProvide
 const itineraryGenerator = new OpenRouterItineraryGenerator();
 
 export async function planTrip(request: TripRequest): Promise<TripPlan> {
-  if (!hasTravelMonth(request)) {
-    throw new Error(travelMonthRequiredMessage);
+  if (!hasExactTravelDates(request)) {
+    throw new Error(exactTravelDatesRequiredMessage);
   }
 
   const currency = normalizeCurrency(request.currency);
@@ -184,9 +184,8 @@ export async function refineTrip(plan: TripPlan, intent: RefinementIntent): Prom
     nextRequest.cityTravelPreference = "public-transit";
     nextRequest.travelStyle = "relaxed";
     nextRequest.tripLengthDays = Math.max(3, nextRequest.tripLengthDays > 4 ? nextRequest.tripLengthDays - 1 : nextRequest.tripLengthDays);
-    if (nextRequest.dateMode === "exact") {
-      nextRequest.dateMode = "month";
-      nextRequest.endDate = "";
+    if (nextRequest.dateMode === "exact" && nextRequest.startDate) {
+      nextRequest.endDate = addDays(nextRequest.startDate, Math.max(1, nextRequest.tripLengthDays - 1));
     }
     nextRequest.interests = Array.from(new Set([...nextRequest.interests, "budget"]));
     nextRequest.excludedDestinationIds = Array.from(new Set([...(nextRequest.excludedDestinationIds ?? []), plan.destination.id]));
@@ -216,6 +215,7 @@ export async function refineTrip(plan: TripPlan, intent: RefinementIntent): Prom
       ...nextRequest,
       totalBudget: Math.max(250, Math.round(nextRequest.totalBudget * 0.86)),
       tripLengthDays: Math.max(3, nextRequest.tripLengthDays - 1),
+      endDate: nextRequest.dateMode === "exact" && nextRequest.startDate ? addDays(nextRequest.startDate, Math.max(2, nextRequest.tripLengthDays - 2)) : nextRequest.endDate,
       excludedDestinationIds: Array.from(new Set([...(nextRequest.excludedDestinationIds ?? []), refined.destination.id]))
     });
   }
@@ -233,13 +233,12 @@ function refinementNotes(intent: RefinementIntent, previous: TripPlan, refined: 
   const savings = Math.max(0, previous.budget.totalEstimated - refined.budget.totalEstimated);
   const destinationChanged = previous.destination.id !== refined.destination.id;
   const daysChanged = previous.request.tripLengthDays !== refined.request.tripLengthDays;
-  const dateChanged = previous.request.dateMode === "exact" && refined.request.dateMode === "month";
   const hotel = refined.hotels[0];
   const flight = refined.priceComparison.flights[0];
   const tradeoffs = [
     destinationChanged ? `different destination (${refined.destination.name})` : "same destination with lower-cost choices",
     daysChanged ? `${refined.request.tripLengthDays} trip days` : "same trip length",
-    dateChanged ? "more flexible month search instead of exact dates" : "flexible timing where available",
+    "same exact date window where possible",
     "public transit over car-first planning",
     hotel ? `value stay around ${formatMoney(hotel.nightlyPrice, currency)}/night` : "value stay package",
     flight ? `flight package around ${formatMoney(flight.estimatedPrice, currency)}` : "lower fare package"
@@ -249,6 +248,13 @@ function refinementNotes(intent: RefinementIntent, previous: TripPlan, refined: 
     `A cheaper search found ${savings > 0 ? `${formatMoney(savings, currency)} in estimated savings` : "a lower-cost package mix"} compared with the previous plan.`,
     `Tradeoffs: ${tradeoffs.join("; ")}.`
   ];
+}
+
+function addDays(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 export function providerHealth() {

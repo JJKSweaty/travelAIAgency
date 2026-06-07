@@ -40,17 +40,14 @@ describe("TravelOptionsPage", () => {
     expect(screen.queryByText(/^Luxury$/i)).not.toBeInTheDocument();
   });
 
-  it("searches hotels automatically for month trips with representative dates", async () => {
+  it("does not search hotels for month-only trips", async () => {
     mockTravelFetch({ hotels: [hotelResult({ id: "month-hotel", name: "Month Hotel", pricePerNight: 150, totalPrice: 600 })] });
     window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(monthTripPlan()));
 
     render(<TravelOptionsPage kind="hotels" />);
 
-    await waitFor(() => expect(screen.getByText("Month Hotel")).toBeInTheDocument());
-    const fetchUrl = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
-    expect(fetchUrl.pathname).toBe("/api/travel/hotels");
-    expect(fetchUrl.searchParams.get("checkInDate")).toBe("2026-07-15");
-    expect(fetchUrl.searchParams.get("checkOutDate")).toBe("2026-07-19");
+    await waitFor(() => expect(screen.getAllByText(/choose exact depart and return dates/i).length).toBeGreaterThan(0));
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("opens saved trips from cached hotel results without fetching", async () => {
@@ -139,17 +136,14 @@ describe("TravelOptionsPage", () => {
     expect(screen.getAllByText(/Current price/i).length).toBeGreaterThan(0);
   });
 
-  it("searches flights automatically for month trips with representative dates", async () => {
+  it("does not search flights for month-only trips", async () => {
     mockTravelFetch({ flights: [flightResult({ id: "month-flight", airlineName: "Air Canada", flightNumber: "AC 800", totalPrice: 690 })] });
     window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(monthTripPlan()));
 
     render(<TravelOptionsPage kind="flights" />);
 
-    await waitFor(() => expect(screen.getByText("Air Canada")).toBeInTheDocument());
-    const fetchUrl = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
-    expect(fetchUrl.pathname).toBe("/api/travel/flights");
-    expect(fetchUrl.searchParams.get("departureDate")).toBe("2026-07-15");
-    expect(fetchUrl.searchParams.get("returnDate")).toBe("2026-07-19");
+    await waitFor(() => expect(screen.getAllByText(/choose exact depart and return dates/i).length).toBeGreaterThan(0));
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("selects a live priced flight and updates the trip total", async () => {

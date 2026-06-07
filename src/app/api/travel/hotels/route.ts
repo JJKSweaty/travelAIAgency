@@ -25,6 +25,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Missing required hotel search parameters" }, { status: 400 });
   }
 
+  if (!isDateOnly(checkInDate) || !isDateOnly(checkOutDate) || checkOutDate <= checkInDate) {
+    return NextResponse.json({ error: "Exact check-in and check-out dates are required for live hotel searches" }, { status: 400 });
+  }
+
   const links = hotelFallbackLinks({ destination, checkInDate, checkOutDate, adults, currency });
   const cacheKey = travelCacheKey("hotels", { destination, travelMonth, checkInDate, checkOutDate, tripLengthDays, adults, children, rooms, budget, currency });
   const cached = getTravelCache<HotelRouteResponse>(cacheKey);
@@ -92,4 +96,8 @@ function optionalPositiveInt(value: string | null) {
 
 function currencyParam(value: string | null): CurrencyCode {
   return SUPPORTED_CURRENCIES.has(value ?? "") ? (value as CurrencyCode) : "CAD";
+}
+
+function isDateOnly(value: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }

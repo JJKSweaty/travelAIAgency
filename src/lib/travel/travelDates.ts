@@ -1,6 +1,7 @@
 import type { TripRequest } from "./types";
 
 export const travelMonthRequiredMessage = "Choose a travel month so I can find realistic flight and hotel prices.";
+export const exactTravelDatesRequiredMessage = "Choose exact depart and return dates so I can build a realistic trip budget.";
 
 export function hasTravelMonth(request: Pick<TripRequest, "startDate">) {
   return Boolean(travelMonthFromRequest(request));
@@ -22,4 +23,8 @@ export function isDateOnly(value?: string): value is string {
 
 export function isMonthOnly(value?: string): value is string {
   return Boolean(value && /^\d{4}-\d{2}$/.test(value));
+}
+
+export function hasExactTravelDates(request: Pick<TripRequest, "dateMode" | "startDate" | "endDate">) {
+  return request.dateMode === "exact" && isDateOnly(request.startDate) && isDateOnly(request.endDate) && request.endDate > request.startDate;
 }

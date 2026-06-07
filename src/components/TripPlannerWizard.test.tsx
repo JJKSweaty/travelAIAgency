@@ -45,7 +45,8 @@ describe("TripPlannerWizard", () => {
     render(<TripPlannerWizard />);
     expect(screen.getByRole("heading", { name: /shape a trip around your budget/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/origin/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/travel month/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/depart/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/return/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/total budget/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/in-city travel/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /build trip plan/i })).toBeInTheDocument();
@@ -56,11 +57,11 @@ describe("TripPlannerWizard", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("blocks trip planning until a travel month is selected", async () => {
+  it("blocks trip planning until exact dates are selected", async () => {
     const user = userEvent.setup();
     render(<TripPlannerWizard />);
     await user.click(screen.getByRole("button", { name: /build trip plan/i }));
-    expect(screen.getByText(/choose a travel month so i can find realistic flight and hotel prices/i)).toBeInTheDocument();
+    expect(screen.getByText(/choose exact depart and return dates so i can build a realistic trip budget/i)).toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalled();
   });
 

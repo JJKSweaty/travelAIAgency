@@ -7,6 +7,9 @@ const request: TripRequest = {
   origin: "Toronto",
   preferredDestinationEnabled: true,
   destination: "Seoul",
+  dateMode: "exact",
+  startDate: "2026-07-10",
+  endDate: "2026-07-14",
   tripLengthDays: 5,
   totalBudget: 2400,
   travelers: 2,
@@ -49,8 +52,16 @@ describe("destination providers", () => {
 
   it("prioritizes budget-fitting destinations in trending mode", async () => {
     const provider = new FallbackDestinationTrendProvider();
-    const budgetRequest = { ...request, preferredDestinationEnabled: false, destination: "", totalBudget: 1700 };
+    const budgetRequest = { ...request, preferredDestinationEnabled: false, destination: "", totalBudget: 1900 };
     const result = await provider.findDestinations(budgetRequest);
+    expect(allocateBudget(budgetRequest, result.data[0]).remaining).toBeGreaterThanOrEqual(0);
+  });
+
+  it("keeps very low budgets focused on nearby or Caribbean value destinations", async () => {
+    const provider = new FallbackDestinationTrendProvider();
+    const budgetRequest = { ...request, preferredDestinationEnabled: false, destination: "", totalBudget: 1200, travelers: 1, interests: ["beaches", "budget"] };
+    const result = await provider.findDestinations(budgetRequest);
+    expect(["Canada", "Cuba", "Dominican Republic", "Mexico"]).toContain(result.data[0].country);
     expect(allocateBudget(budgetRequest, result.data[0]).remaining).toBeGreaterThanOrEqual(0);
   });
 

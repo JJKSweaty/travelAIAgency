@@ -1,4 +1,5 @@
 import type { BudgetBreakdown, DestinationOption, TripRequest } from "./types";
+import { estimateRoundTripFlightCost } from "./costEstimates";
 
 const styleMultipliers = {
   relaxed: { lodging: 0.4, transport: 0.16, food: 0.2, activities: 0.12, buffer: 0.12 },
@@ -19,10 +20,12 @@ export function allocateBudget(request: TripRequest, destination: DestinationOpt
   const estimatedHotel = destination.averageNightlyHotel * nights;
   const estimatedFood = destination.averageDailyFood * request.tripLengthDays * request.travelers;
   const estimatedActivities = destination.averageDailyActivities * request.tripLengthDays * request.travelers;
-  const estimatedTransport =
+  const estimatedGroundTransport =
     request.transportPreference === "rental-car"
       ? (destination.costLevel >= 4 ? 68 : destination.costLevel === 3 ? 52 : 39) * request.tripLengthDays
       : (destination.costLevel >= 4 ? 40 : 26) * request.tripLengthDays * request.travelers;
+  const estimatedFlight = estimateRoundTripFlightCost(request, destination);
+  const estimatedTransport = estimatedGroundTransport + estimatedFlight;
 
   const totalEstimated = Math.round(estimatedHotel + estimatedFood + estimatedActivities + estimatedTransport);
   const remaining = total - totalEstimated;
@@ -34,7 +37,7 @@ export function allocateBudget(request: TripRequest, destination: DestinationOpt
   }
 
   if (remaining < 0) {
-    warnings.push("The recommended plan is over budget. Use cheaper refinements or reduce trip length.");
+    warnings.push("The recommended package estimate is over budget. Use cheaper refinements, reduce trip length, or choose a closer lower-fare destination.");
   }
 
   if (lodging / Math.max(nights, 1) < destination.averageNightlyHotel * 0.72) {
@@ -53,6 +56,7 @@ export function allocateBudget(request: TripRequest, destination: DestinationOpt
     warnings
   };
 }
+
 
 export function budgetFitScore(budget: BudgetBreakdown): number {
   if (budget.totalEstimated <= 0) return 0;

@@ -56,7 +56,7 @@ type GooglePlacePhotoResponse = {
 
 async function googlePlacePhotoUrl(photoName: string, apiKey: string) {
   const url = new URL(`https://places.googleapis.com/v1/${photoName}/media`);
-  url.searchParams.set("maxWidthPx", "900");
+  url.searchParams.set("maxWidthPx", "1600");
   url.searchParams.set("skipHttpRedirect", "true");
   const response = await fetch(url, { headers: { "X-Goog-Api-Key": apiKey } });
   if (!response.ok) return undefined;
