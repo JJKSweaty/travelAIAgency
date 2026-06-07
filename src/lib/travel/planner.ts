@@ -1,5 +1,5 @@
 import { allocateBudget } from "./budget";
-import { isOpenRouterConfigured, OpenRouterItineraryGenerator } from "./ai";
+import { isOpenRouterConfigured, OpenRouterDestinationTrendProvider, OpenRouterItineraryGenerator } from "./ai";
 import { convertUsdFields, formatMoney, fromUsd, normalizeCurrency, toUsd } from "./currency";
 import { exactTravelDatesRequiredMessage, hasExactTravelDates } from "./travelDates";
 import { buildDayTransitPlans } from "./transit";
@@ -22,7 +22,7 @@ import {
 } from "./providers";
 import type { RefinementIntent, TripPlan, TripRequest } from "./types";
 
-const destinationProvider = new FallbackDestinationTrendProvider();
+const destinationProvider = new OpenRouterDestinationTrendProvider();
 const hotelProvider: HotelSearchProvider = new CascadingHotelSearchProvider(new GooglePlacesHotelSearchProvider(), new FallbackHotelSearchProvider());
 const carProvider: CarSearchProvider = new FallbackCarSearchProvider();
 const restaurantProvider: RestaurantProvider = new FallbackRestaurantProvider();
@@ -260,7 +260,7 @@ function addDays(value: string, days: number) {
 export function providerHealth() {
   return {
     configuredProviders: {
-      destinations: process.env.TRAVEL_TRENDS_API_KEY ? "live-ready" : "fallback",
+      destinations: isOpenRouterConfigured() ? "openrouter-ai-ready" : process.env.TRAVEL_TRENDS_API_KEY ? "live-ready" : "fallback",
       locations: "local-airport-city-index",
       hotels: process.env.GOOGLE_PLACES_API_KEY || process.env.GOOGLE_MAPS_API_KEY ? "google-places-ready" : process.env.SERPAPI_KEY ? "serpapi-google-hotels-ready" : "demo-catalog",
       flights: process.env.SERPAPI_KEY ? "serpapi-google-flights-ready" : process.env.KIWI_TEQUILA_API_KEY || process.env.TEQUILA_API_KEY ? "kiwi-ready" : process.env.AMADEUS_CLIENT_ID && process.env.AMADEUS_CLIENT_SECRET ? "amadeus-ready" : "fallback",

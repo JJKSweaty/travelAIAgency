@@ -1,4 +1,5 @@
-import { FallbackItineraryGenerator, type ItineraryGenerator } from "./providers";
+import { destinations } from "./fallback-data";
+import { FallbackDestinationTrendProvider, FallbackItineraryGenerator, type DestinationTrendProvider, type ItineraryGenerator } from "./providers";
 import { allocateBudget } from "./budget";
 import type { AttractionOption, DestinationOption, ItineraryDay, ProviderResult, RestaurantOption, TripRequest } from "./types";
 
@@ -45,9 +46,43 @@ export class OpenRouterItineraryGenerator implements ItineraryGenerator {
   }
 }
 
+export class OpenRouterDestinationTrendProvider implements DestinationTrendProvider {
+  private fallback = new FallbackDestinationTrendProvider();
+
+  async findDestinations(request: TripRequest): Promise<ProviderResult<DestinationOption>> {
+    if (request.preferredDestinationEnabled || !isOpenRouterConfigured()) {
+      return this.fallback.findDestinations(request);
+    }
+
+    try {
+      const data = await callOpenRouterContent(buildDestinationPrompt(request), Number(process.env.OPENROUTER_DESTINATION_TIMEOUT_MS ?? 14000));
+      const aiDestinations = normalizeDestinationSuggestions(data, request);
+      const fallback = await this.fallback.findDestinations(request);
+      const merged = mergeDestinations([...aiDestinations, ...fallback.data]);
+      const fitting = merged.filter((destination) => allocateBudget(request, destination).remaining >= 0);
+
+      if (!fitting.length) return fallback;
+
+      return {
+        data: fitting,
+        source: "live",
+        providerName: `OpenRouter destination planner (${process.env.OPENROUTER_MODEL ?? defaultModel})`,
+        confidence: 0.68,
+        warnings: fallback.warnings
+      };
+    } catch {
+      return this.fallback.findDestinations(request);
+    }
+  }
+}
+
 async function callOpenRouter(args: ItineraryArgs): Promise<unknown> {
+  return callOpenRouterContent(buildPrompt(args), Number(process.env.OPENROUTER_TIMEOUT_MS ?? 12000));
+}
+
+async function callOpenRouterContent(content: string, timeoutMs: number): Promise<unknown> {
   const controller = new AbortController();
-  const timeout = windowlessTimeout(() => controller.abort(), Number(process.env.OPENROUTER_TIMEOUT_MS ?? 12000));
+  const timeout = windowlessTimeout(() => controller.abort(), timeoutMs);
   const baseUrl = process.env.OPENROUTER_BASE_URL ?? "https://openrouter.ai/api/v1/chat/completions";
   const apiKey = process.env.OPENROUTER_API_KEY;
 
@@ -71,7 +106,7 @@ async function callOpenRouter(args: ItineraryArgs): Promise<unknown> {
         messages: [
           {
             role: "user",
-            content: buildPrompt(args)
+            content
           }
         ]
       })
@@ -85,6 +120,123 @@ async function callOpenRouter(args: ItineraryArgs): Promise<unknown> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function buildDestinationPrompt(request: TripRequest) {
+  const seedSummaries = destinations
+    .map((destination) => ({
+      name: destination.name,
+      country: destination.country,
+      averageNightlyHotel: destination.averageNightlyHotel,
+      averageDailyFood: destination.averageDailyFood,
+      averageDailyActivities: destination.averageDailyActivities,
+      costLevel: destination.costLevel,
+      bestFor: destination.bestFor
+    }))
+    .slice(0, 40);
+
+  return JSON.stringify({
+    instruction:
+      "Return JSON only. Recommend affordable travel destinations for this exact trip budget. Prefer places whose full package can fit the budget including round-trip transport from origin, lodging, food, activities, and local transport. Include obvious nearby or package-friendly choices when appropriate, such as domestic Canada, Cuba, Dominican Republic, Mexico, or other low-cost destinations. Do not recommend anything likely over budget.",
+    schema: {
+      destinations: [
+        {
+          name: "Varadero",
+          country: "Cuba",
+          summary: "why this fits the budget",
+          costLevel: 1,
+          averageNightlyHotel: 80,
+          averageDailyFood: 10,
+          averageDailyActivities: 10,
+          bestFor: ["beaches", "budget", "family"]
+        }
+      ]
+    },
+    trip: {
+      origin: request.origin,
+      budgetUsd: request.totalBudget,
+      days: request.tripLengthDays,
+      travelers: request.travelers,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      style: request.travelStyle,
+      interests: request.interests,
+      transportPreference: request.transportPreference
+    },
+    existingSeeds: seedSummaries
+  });
+}
+
+function normalizeDestinationSuggestions(data: unknown, request: TripRequest): DestinationOption[] {
+  const source = Array.isArray(data) ? data : isRecord(data) && Array.isArray(data.destinations) ? data.destinations : [];
+  return source
+    .map((item, index) => normalizeDestinationSuggestion(item, request, index))
+    .filter((destination): destination is DestinationOption => Boolean(destination))
+    .filter((destination) => allocateBudget(request, destination).remaining >= 0)
+    .sort((a, b) => allocateBudget(request, b).remaining - allocateBudget(request, a).remaining)
+    .slice(0, 6);
+}
+
+function normalizeDestinationSuggestion(item: unknown, request: TripRequest, index: number): DestinationOption | null {
+  if (!isRecord(item)) return null;
+  const name = stringValue(item.name);
+  const country = stringValue(item.country);
+  if (!name || !country) return null;
+
+  const existing = destinations.find((destination) => destination.name.toLowerCase() === name.toLowerCase() && destination.country.toLowerCase() === country.toLowerCase());
+  if (existing) return existing;
+
+  const bestFor = normalizeInterests(item.bestFor, request);
+  const costLevel = integerInRange(item.costLevel, 1, 5) as DestinationOption["costLevel"];
+  const averageNightlyHotel = integerInRange(item.averageNightlyHotel, 35, 260);
+  const averageDailyFood = integerInRange(item.averageDailyFood, 8, 95);
+  const averageDailyActivities = integerInRange(item.averageDailyActivities, 8, 95);
+  const label = `${name}, ${country}`;
+
+  return {
+    id: `ai-${slug(label)}-${index + 1}`,
+    name,
+    country,
+    summary: stringValue(item.summary) || "AI-suggested value destination selected because the package estimate fits this budget.",
+    imageUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1400&q=80",
+    costLevel,
+    trendingScore: 82,
+    bestFor,
+    averageNightlyHotel,
+    averageDailyFood,
+    averageDailyActivities,
+    bookingLink: `https://www.google.com/travel/explore?q=${encodeURIComponent(label)}`
+  };
+}
+
+function normalizeInterests(value: unknown, request: TripRequest) {
+  const allowed = new Set(["food", "nightlife", "nature", "museums", "beaches", "family", "luxury", "budget", "adventure"]);
+  const raw = Array.isArray(value) ? value : [];
+  const interests = raw.filter((item): item is string => typeof item === "string" && allowed.has(item)) as DestinationOption["bestFor"];
+  const merged = Array.from(new Set([...interests, ...request.interests, "budget"])) as DestinationOption["bestFor"];
+  return merged.slice(0, 4);
+}
+
+function integerInRange(value: unknown, min: number, max: number) {
+  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : min;
+  if (!Number.isFinite(parsed)) return min;
+  return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+function mergeDestinations(values: DestinationOption[]) {
+  const seen = new Set<string>();
+  const merged: DestinationOption[] = [];
+  for (const destination of values) {
+    const key = `${destination.name},${destination.country}`.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(destination);
+  }
+  return merged;
+}
+
+function slug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "destination";
 }
 
 function buildPrompt({ destination, request, restaurants, attractions }: ItineraryArgs) {

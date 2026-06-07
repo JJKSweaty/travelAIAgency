@@ -48,6 +48,26 @@ describe("planTrip", () => {
     expect(plan.alternates).toHaveLength(2);
   });
 
+  it("does not auto-build an over-budget destination when a value destination can fit", async () => {
+    const plan = await planTrip({
+      ...request,
+      preferredDestinationEnabled: false,
+      destination: "",
+      currency: "CAD",
+      totalBudget: 2400,
+      tripLengthDays: 7,
+      startDate: "2026-07-10",
+      endDate: "2026-07-16",
+      travelers: 2,
+      interests: ["beaches", "budget"],
+      travelStyle: "relaxed",
+      transportPreference: "public-transit"
+    });
+
+    expect(plan.budget.remaining).toBeGreaterThanOrEqual(0);
+    expect(plan.budget.totalEstimated).toBeLessThanOrEqual(plan.request.totalBudget);
+  });
+
   it("adds a note when preferred destination free text is not curated", async () => {
     const plan = await planTrip({ ...request, destination: "Atlantis" });
     expect(plan.notes.some((note) => note.includes("broader market estimates"))).toBe(true);

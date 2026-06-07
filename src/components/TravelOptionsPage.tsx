@@ -16,6 +16,7 @@ import {
   MapPinned,
   Plane,
   RotateCcw,
+  Search,
   ShieldCheck,
   SlidersHorizontal,
   Star,
@@ -25,6 +26,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/travel/currency";
@@ -78,6 +80,27 @@ type ProviderSearchState = {
 type ProviderCacheArgs =
   | { kind: "flights"; plan: TripPlan; searchKey: string; fetchedAt: string; flights: FlightResult[] }
   | { kind: "hotels"; plan: TripPlan; searchKey: string; fetchedAt: string; hotels: HotelResult[] };
+
+type AccommodationLinkDetails = {
+  name: string;
+  location: string;
+  sourceUrl: string;
+  source: string;
+  description: string | null;
+  imageUrl: string | null;
+  fetchedAt: string;
+};
+
+type OwnStayState = {
+  link: string;
+  nightlyPrice: string;
+  name: string;
+  location: string;
+  loading: boolean;
+  error: string;
+  message: string;
+  details: AccommodationLinkDetails | null;
+};
 
 const emptyProviderSearch: ProviderSearchState = {
   loading: false,
@@ -432,6 +455,16 @@ function HotelResultsExperience({
     starRating: "any",
     tier: "any"
   });
+  const [ownStay, setOwnStay] = useState<OwnStayState>({
+    link: "",
+    nightlyPrice: "",
+    name: "",
+    location: "",
+    loading: false,
+    error: "",
+    message: "",
+    details: null as AccommodationLinkDetails | null
+  });
   const visibleOptions = useMemo(() => sortHotelResults(filterHotelResults(options, filters), sort), [filters, options, sort]);
   const lowest = sortHotelResults(options, "lowest-price")[0];
   const rated = sortHotelResults(options, "highest-rated")[0];
@@ -441,6 +474,81 @@ function HotelResultsExperience({
   function resetFilters() {
     setFilters({ freeCancellation: false, breakfastIncluded: false, proximity: "any", starRating: "any", tier: "any" });
     setSort("best-value");
+  }
+
+  async function inspectOwnStay() {
+    const link = ownStay.link.trim();
+    if (!link) {
+      setOwnStay((current) => ({ ...current, error: "Paste the accommodation link first." }));
+      return;
+    }
+
+    setOwnStay((current) => ({ ...current, loading: true, error: "", message: "" }));
+    try {
+      const response = await fetch("/api/travel/accommodation-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: link })
+      });
+      const body = (await response.json()) as { accommodation?: AccommodationLinkDetails; message?: string; error?: string };
+      if (!response.ok || !body.accommodation) throw new Error(body.error ?? "Could not read that accommodation link.");
+      setOwnStay((current) => ({
+        ...current,
+        loading: false,
+        details: body.accommodation ?? null,
+        name: current.name || body.accommodation?.name || "",
+        location: current.location || body.accommodation?.location || "",
+        message: body.message ?? "Details found. Add the nightly price to use this stay."
+      }));
+    } catch (error) {
+      setOwnStay((current) => ({
+        ...current,
+        loading: false,
+        error: error instanceof Error ? error.message : "Could not read that accommodation link."
+      }));
+    }
+  }
+
+  function useOwnStay() {
+    const price = Number(ownStay.nightlyPrice);
+    if (!ownStay.link.trim()) {
+      setOwnStay((current) => ({ ...current, error: "Paste the accommodation link first." }));
+      return;
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      setOwnStay((current) => ({ ...current, error: "Enter the nightly price shown on the listing." }));
+      return;
+    }
+
+    const details = ownStay.details;
+    const option: HotelSearchOption = {
+      id: `own-stay-${Date.now()}`,
+      name: ownStay.name.trim() || details?.name || "My accommodation",
+      location: ownStay.location.trim() || details?.location || plan.destination.name,
+      imageUrl: details?.imageUrl ?? "",
+      nightlyPrice: Math.round(price),
+      priceSource: "live",
+      totalPrice: Math.round(price * nights),
+      hasKnownPrice: true,
+      rating: null,
+      reviewCount: null,
+      starRating: null,
+      description: details?.description ?? "Accommodation you found and added by link.",
+      amenities: ["Your own stay", "Price entered manually", "Check listing terms"],
+      cancellationNote: "Use the listing page for final fees, taxes, and cancellation terms.",
+      freeCancellation: false,
+      breakfastIncluded: false,
+      proximity: "near-attractions",
+      distanceKm: null,
+      tier: price <= plan.destination.averageNightlyHotel * 0.85 ? "budget" : price >= plan.destination.averageNightlyHotel * 1.25 ? "luxury" : "midrange",
+      valueScore: 180 - Math.round(price / 4),
+      source: details?.source ?? "Own accommodation",
+      link: ownStay.link.trim(),
+      sourceLabel: "Your accommodation",
+      fetchedAt: details?.fetchedAt ?? new Date().toISOString(),
+      propertyToken: ownStay.link.trim()
+    };
+    onSelect(option);
   }
 
   return (
@@ -485,6 +593,8 @@ function HotelResultsExperience({
         <HotelFilterPanel filters={filters} setFilters={setFilters} onReset={resetFilters} />
 
         <div className="grid content-start gap-4">
+          <OwnStayPanel ownStay={ownStay} setOwnStay={setOwnStay} currency={currency} nights={nights} onInspect={inspectOwnStay} onUse={useOwnStay} />
+
           <div className="rounded-lg border border-ink/10 bg-white p-3 shadow-subtle">
             <div className="grid gap-3 md:grid-cols-4">
               <HotelSortButton label="Best value" active={sort === "best-value"} onClick={() => setSort("best-value")} detail="Location + rating" />
@@ -534,6 +644,74 @@ function HotelResultsExperience({
         </div>
       </section>
     </main>
+  );
+}
+
+function OwnStayPanel({
+  ownStay,
+  setOwnStay,
+  currency,
+  nights,
+  onInspect,
+  onUse
+}: {
+  ownStay: OwnStayState;
+  setOwnStay: React.Dispatch<React.SetStateAction<OwnStayState>>;
+  currency?: CurrencyCode;
+  nights: number;
+  onInspect: () => void;
+  onUse: () => void;
+}) {
+  const nightly = Number(ownStay.nightlyPrice);
+  const total = Number.isFinite(nightly) && nightly > 0 ? Math.round(nightly * nights) : null;
+
+  return (
+    <section className="rounded-lg border border-ink/10 bg-white p-4 shadow-subtle">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Use your own stay</p>
+          <h2 className="mt-1 text-xl font-semibold">Paste an Airbnb or hotel link</h2>
+        </div>
+        {total !== null ? <Badge variant="secondary">{formatMoney(total, currency)} total</Badge> : null}
+      </div>
+
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_160px_auto] lg:items-end">
+        <label className="grid gap-2">
+          <span className="text-sm font-semibold text-ink/68">Accommodation link</span>
+          <Input value={ownStay.link} placeholder="https://..." onChange={(event) => setOwnStay((current) => ({ ...current, link: event.target.value, error: "", message: "" }))} />
+        </label>
+        <label className="grid gap-2">
+          <span className="text-sm font-semibold text-ink/68">Nightly price</span>
+          <Input type="number" min={1} step={1} value={ownStay.nightlyPrice} placeholder={currency ?? "CAD"} onChange={(event) => setOwnStay((current) => ({ ...current, nightlyPrice: event.target.value, error: "" }))} />
+        </label>
+        <Button variant="outline" onClick={onInspect} disabled={ownStay.loading}>
+          <Search size={16} aria-hidden />
+          {ownStay.loading ? "Reading..." : "Read link"}
+        </Button>
+      </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-2">
+          <span className="text-sm font-semibold text-ink/68">Name</span>
+          <Input value={ownStay.name} placeholder={ownStay.details?.name ?? "My accommodation"} onChange={(event) => setOwnStay((current) => ({ ...current, name: event.target.value }))} />
+        </label>
+        <label className="grid gap-2">
+          <span className="text-sm font-semibold text-ink/68">Location</span>
+          <Input value={ownStay.location} placeholder={ownStay.details?.location ?? "Listing location"} onChange={(event) => setOwnStay((current) => ({ ...current, location: event.target.value }))} />
+        </label>
+      </div>
+
+      {ownStay.error ? <p className="mt-3 rounded-lg bg-coral/10 px-3 py-2 text-sm font-medium text-coral">{ownStay.error}</p> : null}
+      {ownStay.message ? <p className="mt-3 rounded-lg bg-ink/5 px-3 py-2 text-sm text-ink/62">{ownStay.message}</p> : null}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
+        <p className="text-sm text-ink/58">Final taxes, fees, and cancellation terms still need checking on the listing page.</p>
+        <Button variant="reef" onClick={onUse}>
+          <CheckCircle2 size={16} aria-hidden />
+          Use this stay
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -620,14 +798,14 @@ function HotelFilterPanel({
   onReset: () => void;
 }) {
   return (
-    <Card className="h-fit lg:sticky lg:top-4">
+    <Card className="h-fit border-ink/10 bg-white shadow-subtle lg:sticky lg:top-4">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <SlidersHorizontal size={18} aria-hidden />
           Filter stays
         </CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-5">
+      <CardContent className="grid gap-4">
         <FilterGroup label="Included">
           <div className="grid gap-2">
             <ToggleRow active={filters.freeCancellation} label="Free cancellation" onClick={() => setFilters({ ...filters, freeCancellation: !filters.freeCancellation })} />
@@ -942,7 +1120,7 @@ function FlightSortButton({ label, detail, active, onClick }: { label: string; d
 
 function HotelSortButton({ label, detail, active, onClick }: { label: string; detail: string; active: boolean; onClick: () => void }) {
   return (
-    <button className={`focus-ring rounded-lg border px-4 py-3 text-left transition ${active ? "border-reef bg-reef/10 text-reef" : "border-ink/10 bg-white text-ink hover:border-reef/40"}`} onClick={onClick}>
+    <button className={`focus-ring min-h-[84px] rounded-lg border px-4 py-3 text-left transition ${active ? "border-reef bg-reef/10 text-reef" : "border-ink/10 bg-white text-ink hover:border-reef/40"}`} onClick={onClick}>
       <span className="block font-semibold">{label}</span>
       <span className="mt-1 block text-sm text-ink/56">{detail}</span>
     </button>
@@ -964,7 +1142,7 @@ function ChipRow({ children }: { children: React.ReactNode }) {
 
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
-    <button className={`focus-ring rounded-full border px-3 py-1.5 text-sm font-semibold transition ${active ? "border-reef bg-reef text-white" : "border-ink/10 bg-white text-ink/64 hover:border-reef/40 hover:text-reef"}`} onClick={onClick}>
+    <button className={`focus-ring min-h-9 rounded-lg border px-3 py-2 text-sm font-semibold transition ${active ? "border-reef bg-reef text-white" : "border-ink/10 bg-white text-ink/64 hover:border-reef/40 hover:text-reef"}`} onClick={onClick}>
       {children}
     </button>
   );
@@ -972,7 +1150,7 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
 
 function ToggleRow({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
-    <button className={`focus-ring flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm font-semibold transition ${active ? "border-reef bg-reef/10 text-reef" : "border-ink/10 bg-white text-ink/66 hover:border-reef/40"}`} onClick={onClick}>
+    <button className={`focus-ring flex min-h-11 items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm font-semibold transition ${active ? "border-reef bg-reef/10 text-reef" : "border-ink/10 bg-white text-ink/66 hover:border-reef/40"}`} onClick={onClick}>
       {label}
       <span className={`flex h-5 w-5 items-center justify-center rounded border ${active ? "border-reef bg-reef text-white" : "border-ink/20 bg-white"}`}>
         {active ? <CheckCircle2 size={14} aria-hidden /> : null}

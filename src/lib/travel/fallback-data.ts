@@ -40,8 +40,8 @@ export const destinations: DestinationOption[] = [
     trendingScore: 92,
     bestFor: ["beaches", "budget", "family", "nightlife"],
     averageNightlyHotel: 118,
-    averageDailyFood: 42,
-    averageDailyActivities: 38,
+    averageDailyFood: 18,
+    averageDailyActivities: 22,
     bookingLink: "https://www.google.com/travel/explore?q=Cancun%20Mexico"
   },
   {
@@ -67,9 +67,9 @@ export const destinations: DestinationOption[] = [
     costLevel: 1,
     trendingScore: 83,
     bestFor: ["beaches", "budget", "family"],
-    averageNightlyHotel: 86,
-    averageDailyFood: 28,
-    averageDailyActivities: 24,
+    averageNightlyHotel: 82,
+    averageDailyFood: 10,
+    averageDailyActivities: 10,
     bookingLink: "https://www.google.com/travel/explore?q=Varadero%20Cuba"
   },
   {
@@ -81,9 +81,9 @@ export const destinations: DestinationOption[] = [
     costLevel: 2,
     trendingScore: 90,
     bestFor: ["beaches", "budget", "family", "luxury"],
-    averageNightlyHotel: 110,
-    averageDailyFood: 34,
-    averageDailyActivities: 32,
+    averageNightlyHotel: 96,
+    averageDailyFood: 12,
+    averageDailyActivities: 14,
     bookingLink: "https://www.google.com/travel/explore?q=Punta%20Cana%20Dominican%20Republic"
   },
   {

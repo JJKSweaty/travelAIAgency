@@ -64,6 +64,7 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
         return {
           destination,
           preferredMatch,
+          budget,
           score:
             budgetFitRankScore(budget.remaining, budget.feasibility) +
             destination.trendingScore * 0.35 +
@@ -71,7 +72,9 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
             Math.abs(destination.costLevel - budgetCostTarget(request.totalBudget, request.tripLengthDays, request.travelers)) * 3 +
             matchScore
         };
-      })
+      });
+    const budgetQualified = !request.preferredDestinationEnabled && scored.some((entry) => entry.budget.remaining >= 0) ? scored.filter((entry) => entry.budget.remaining >= 0) : scored;
+    const ranked = budgetQualified
       .sort((a, b) => {
         if (request.preferredDestinationEnabled && normalized && a.preferredMatch !== b.preferredMatch) {
           return a.preferredMatch ? -1 : 1;
@@ -79,7 +82,7 @@ export class FallbackDestinationTrendProvider implements DestinationTrendProvide
         return b.score - a.score;
       })
       .map((entry) => entry.destination);
-    const rankedDestinations = scored.length ? scored : destinations;
+    const rankedDestinations = ranked.length ? ranked : destinations;
     const topDestination = rankedDestinations[0];
     const matchedPreferred = Boolean(normalized && topDestination && destinationMatchesQuery(topDestination, normalized));
     const data = request.preferredDestinationEnabled && normalized && !matchedPreferred ? [customDestination(request), ...rankedDestinations] : rankedDestinations;

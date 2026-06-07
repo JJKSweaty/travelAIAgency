@@ -20,10 +20,11 @@ export function allocateBudget(request: TripRequest, destination: DestinationOpt
   const estimatedHotel = destination.averageNightlyHotel * nights;
   const estimatedFood = destination.averageDailyFood * request.tripLengthDays * request.travelers;
   const estimatedActivities = destination.averageDailyActivities * request.tripLengthDays * request.travelers;
+  const resortValueTrip = isResortValueTrip(destination);
   const estimatedGroundTransport =
     request.transportPreference === "rental-car"
       ? (destination.costLevel >= 4 ? 68 : destination.costLevel === 3 ? 52 : 39) * request.tripLengthDays
-      : (destination.costLevel >= 4 ? 40 : 26) * request.tripLengthDays * request.travelers;
+      : (resortValueTrip ? 12 : destination.costLevel >= 4 ? 40 : 26) * request.tripLengthDays * request.travelers;
   const estimatedFlight = estimateRoundTripFlightCost(request, destination);
   const estimatedTransport = estimatedGroundTransport + estimatedFlight;
 
@@ -55,6 +56,11 @@ export function allocateBudget(request: TripRequest, destination: DestinationOpt
     feasibility: ratio < 0.9 ? "tight" : ratio < 1.2 ? "workable" : "comfortable",
     warnings
   };
+}
+
+function isResortValueTrip(destination: DestinationOption) {
+  const label = `${destination.name} ${destination.country}`.toLowerCase();
+  return destination.bestFor.includes("beaches") && destination.bestFor.includes("budget") && /cuba|dominican republic|punta cana|varadero|cancun/.test(label);
 }
 
 

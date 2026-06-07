@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { OpenRouterItineraryGenerator } from "./ai";
+import { OpenRouterDestinationTrendProvider, OpenRouterItineraryGenerator } from "./ai";
+import { allocateBudget } from "./budget";
 import type { AttractionOption, DestinationOption, RestaurantOption, TripRequest } from "./types";
 
 const destination: DestinationOption = {
@@ -126,5 +127,78 @@ describe("OpenRouterItineraryGenerator", () => {
 
     const result = await new OpenRouterItineraryGenerator().generateItinerary({ destination, request, restaurants, attractions });
     expect(result.source).toBe("fallback");
+  });
+});
+
+describe("OpenRouterDestinationTrendProvider", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_MODEL;
+    delete process.env.OPENROUTER_BASE_URL;
+    delete process.env.OPENROUTER_TEMPERATURE;
+    delete process.env.OPENROUTER_TOP_P;
+  });
+
+  it("uses OpenRouter auto-destination suggestions only when the package estimate fits", async () => {
+    process.env.OPENROUTER_API_KEY = "test-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  destinations: [
+                    {
+                      name: "Dubai",
+                      country: "United Arab Emirates",
+                      summary: "Too expensive for this test.",
+                      costLevel: 5,
+                      averageNightlyHotel: 300,
+                      averageDailyFood: 95,
+                      averageDailyActivities: 90,
+                      bestFor: ["luxury"]
+                    },
+                    {
+                      name: "Varadero",
+                      country: "Cuba",
+                      summary: "All-inclusive beach value from Toronto.",
+                      costLevel: 1,
+                      averageNightlyHotel: 78,
+                      averageDailyFood: 10,
+                      averageDailyActivities: 10,
+                      bestFor: ["beaches", "budget", "family"]
+                    }
+                  ]
+                })
+              }
+            }
+          ]
+        })
+      })
+    );
+
+    const autoRequest: TripRequest = {
+      ...request,
+      preferredDestinationEnabled: false,
+      destination: "",
+      dateMode: "exact",
+      startDate: "2026-07-10",
+      endDate: "2026-07-16",
+      tripLengthDays: 7,
+      totalBudget: 1778,
+      travelers: 2,
+      interests: ["beaches", "budget"]
+    };
+    const result = await new OpenRouterDestinationTrendProvider().findDestinations(autoRequest);
+
+    expect(result.source).toBe("live");
+    expect(result.data[0]).toMatchObject({ name: "Varadero", country: "Cuba" });
+    expect(allocateBudget(autoRequest, result.data[0]).remaining).toBeGreaterThanOrEqual(0);
+    expect(result.data.some((destination) => destination.name === "Dubai")).toBe(false);
   });
 });

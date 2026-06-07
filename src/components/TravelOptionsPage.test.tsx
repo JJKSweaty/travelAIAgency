@@ -115,6 +115,31 @@ describe("TravelOptionsPage", () => {
     expect(pushMock).toHaveBeenCalledWith("/results");
   });
 
+  it("selects an accommodation pasted by the user and updates the trip total", async () => {
+    const user = userEvent.setup();
+    const plan = createTripPlan();
+    mockTravelFetch({ hotels: [] });
+    window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(plan));
+
+    render(<TravelOptionsPage kind="hotels" />);
+
+    await waitFor(() => expect(screen.getByRole("heading", { name: /choose your stay/i })).toBeInTheDocument());
+    await user.type(screen.getByLabelText(/accommodation link/i), "https://examplehotel.com/stays/ocean-suite");
+    await user.type(screen.getByLabelText(/nightly price/i), "80");
+    await user.click(screen.getByRole("button", { name: /read link/i }));
+    await waitFor(() => expect(screen.getByDisplayValue("Ocean Suite")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /use this stay/i }));
+
+    await waitFor(() => {
+      const current = JSON.parse(window.sessionStorage.getItem("roamly.currentTrip") ?? "{}");
+      expect(current.selectedHotel.name).toBe("Ocean Suite");
+      expect(current.selectedHotel.currentPrice).toBe(80);
+      expect(current.selectedStay.label).toBe("Ocean Suite");
+      expect(current.budget.totalEstimated).toBeLessThan(plan.budget.totalEstimated);
+    });
+    expect(pushMock).toHaveBeenCalledWith("/results");
+  });
+
   it("filters live flight results from normalized SerpApi flights", async () => {
     const user = userEvent.setup();
     mockTravelFetch({
@@ -183,6 +208,19 @@ function mockTravelFetch(results: { flights?: FlightResult[]; hotels?: HotelResu
       }
       if (url.includes("/api/travel/hotels")) {
         return Response.json({ hotels: results.hotels ?? [], links: [] });
+      }
+      if (url.includes("/api/travel/accommodation-link")) {
+        return Response.json({
+          accommodation: {
+            name: "Ocean Suite",
+            location: "examplehotel.com",
+            sourceUrl: "https://examplehotel.com/stays/ocean-suite",
+            source: "examplehotel.com",
+            description: "Accommodation link from examplehotel.com.",
+            imageUrl: null,
+            fetchedAt
+          }
+        });
       }
       return Response.json({});
     })
