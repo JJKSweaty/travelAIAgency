@@ -128,7 +128,7 @@ export class FallbackHotelSearchProvider implements HotelSearchProvider {
 export class GooglePlacesHotelSearchProvider implements HotelSearchProvider {
   async searchHotels(destination: DestinationOption): Promise<ProviderResult<HotelOption>> {
     const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return { data: [], source: "fallback", providerName: "Google Places", confidence: 0, warnings: ["Google Places is not configured."] };
+    if (!apiKey) return { data: [], source: "fallback", providerName: "Google Places", confidence: 0, warnings: ["Current hotel listings are not connected yet."] };
 
     try {
       const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
@@ -167,7 +167,7 @@ export class GooglePlacesHotelSearchProvider implements HotelSearchProvider {
             priceSource: "unavailable" as const,
             imageUrl,
             reviewCount: place.userRatingCount,
-            description: place.editorialSummary?.text ?? "Real hotel result from Google Places. Open the partner page to check live room rates and availability.",
+            description: place.editorialSummary?.text ?? "Hotel listing with rates and availability to confirm before booking.",
             amenities: googleHotelAmenities(place.types),
             cancellationNote: "Rates and cancellation terms are shown on the partner site.",
             totalPrice: undefined,
@@ -185,7 +185,7 @@ export class GooglePlacesHotelSearchProvider implements HotelSearchProvider {
         source: "live",
         providerName: "Google Places",
         confidence: data.length ? 0.82 : 0.2,
-        warnings: data.length ? undefined : ["No Google Places hotel results were returned for this destination."]
+        warnings: data.length ? undefined : ["I could not find current hotel listings for this destination."]
       };
     } catch {
       return {
@@ -193,7 +193,7 @@ export class GooglePlacesHotelSearchProvider implements HotelSearchProvider {
         source: "fallback",
         providerName: "Google Places",
         confidence: 0,
-        warnings: ["Google Places hotel search was unavailable, so Roamly used its configured fallback."]
+        warnings: ["I could not check current hotel listings, so the plan uses broader market estimates."]
       };
     }
   }
@@ -263,7 +263,7 @@ export class AmadeusTravelPriceProvider implements TravelPriceProvider {
     const clientId = process.env.AMADEUS_CLIENT_ID;
     const clientSecret = process.env.AMADEUS_CLIENT_SECRET;
     if (!clientId || !clientSecret) {
-      return { data: [], source: "fallback", providerName: "Amadeus Flight Offers Search", confidence: 0, warnings: ["Amadeus is not configured."] };
+      return { data: [], source: "fallback", providerName: "Amadeus Flight Offers Search", confidence: 0, warnings: ["Current flight listings are not connected yet."] };
     }
 
     const originCode = airportCodeFor(request.origin);
@@ -275,7 +275,7 @@ export class AmadeusTravelPriceProvider implements TravelPriceProvider {
         source: "fallback",
         providerName: "Amadeus Flight Offers Search",
         confidence: 0,
-        warnings: ["Amadeus needs origin and destination airport codes plus usable travel dates."]
+        warnings: ["Flight price checks need matched airports and usable travel dates."]
       };
     }
 
@@ -305,14 +305,14 @@ export class AmadeusTravelPriceProvider implements TravelPriceProvider {
             lowestFlight: [...flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0],
             lowestHotel: hotels[0],
             sourceNote: flights.length
-              ? "Flight prices and availability come from Amadeus Flight Offers Search. Hotel prices are shown only when a hotel pricing provider is configured."
-              : "Amadeus did not return flight offers for this route and date combination."
+              ? "Flight prices and availability were checked for this route. Hotel prices are shown when current hotel pricing is available."
+              : "I could not find current flight options for this route and date combination."
           }
         ],
         source: flights.length ? "live" : "fallback",
         providerName: "Amadeus Flight Offers Search",
         confidence: flights.length ? 0.86 : 0.2,
-        warnings: flights.length ? undefined : ["No Amadeus flight offers were returned for this route and date combination."]
+        warnings: flights.length ? undefined : ["I could not find current flight options for this route and date combination."]
       };
     } catch {
       return {
@@ -320,7 +320,7 @@ export class AmadeusTravelPriceProvider implements TravelPriceProvider {
         source: "fallback",
         providerName: "Amadeus Flight Offers Search",
         confidence: 0,
-        warnings: ["Amadeus flight search was unavailable, so Roamly used its configured fallback."]
+        warnings: ["I could not check current flight prices, so the plan uses broader market estimates."]
       };
     }
   }
@@ -517,7 +517,7 @@ async function googlePlacePhotoUrl(photoName: string, apiKey: string) {
 }
 
 function googleHotelAmenities(types?: string[]) {
-  const values = new Set(["Real place listing", "Open partner rates"]);
+  const values = new Set(["Verified place listing", "Open partner rates"]);
   if (types?.some((type) => /restaurant|food/i.test(type))) values.add("Restaurant nearby");
   if (types?.some((type) => /spa/i.test(type))) values.add("Spa access");
   values.add("Check availability");

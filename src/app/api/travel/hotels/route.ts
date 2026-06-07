@@ -17,13 +17,16 @@ export async function GET(req: Request) {
   const children = optionalPositiveInt(searchParams.get("children"));
   const rooms = positiveInt(searchParams.get("rooms"), 1);
   const currency = currencyParam(searchParams.get("currency"));
+  const travelMonth = searchParams.get("travelMonth")?.trim() || null;
+  const tripLengthDays = optionalPositiveInt(searchParams.get("tripLengthDays"));
+  const budget = optionalPositiveInt(searchParams.get("budget"));
 
   if (!destination || !checkInDate || !checkOutDate) {
     return NextResponse.json({ error: "Missing required hotel search parameters" }, { status: 400 });
   }
 
   const links = hotelFallbackLinks({ destination, checkInDate, checkOutDate, adults, currency });
-  const cacheKey = travelCacheKey("hotels", { destination, checkInDate, checkOutDate, adults, children, rooms, currency });
+  const cacheKey = travelCacheKey("hotels", { destination, travelMonth, checkInDate, checkOutDate, tripLengthDays, adults, children, rooms, budget, currency });
   const cached = getTravelCache<HotelRouteResponse>(cacheKey);
   if (cached) return NextResponse.json(cached);
 
@@ -34,7 +37,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       hotels: [],
       links,
-      message: "Live hotel providers are not configured. Use a provider search link for current rates."
+      message: "I could not check current hotel prices here. Use a search link for current rates."
     });
   }
 
@@ -47,7 +50,7 @@ export async function GET(req: Request) {
       hotels = result.hotels;
       if (result.message) messages.push(result.message);
     } catch {
-      messages.push("Google Hotels provider did not respond.");
+      messages.push("Hotel price search did not respond.");
     }
   }
 
@@ -57,14 +60,14 @@ export async function GET(req: Request) {
       hotels = result.hotels;
       if (result.message) messages.push(result.message);
     } catch {
-      messages.push("Google Places provider did not respond.");
+      messages.push("Hotel listing search did not respond.");
     }
   }
 
   const payload: HotelRouteResponse = {
     hotels,
     links: hotels.length ? [] : links,
-    message: hotels.length ? undefined : messages[0] || "No structured hotel results are available. Use a provider search link for current rates."
+    message: hotels.length ? undefined : messages[0] || "I could not find current hotel options for this destination and month. Use a search link for current rates."
   };
 
   return NextResponse.json(setTravelCache(cacheKey, payload, HOTEL_SEARCH_TTL_MS));

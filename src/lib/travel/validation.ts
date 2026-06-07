@@ -28,5 +28,5 @@ export function isPriceStale(fetchedAt?: string | null, now = Date.now()) {
 }
 
 export function stalePriceMessage(fetchedAt?: string | null) {
-  return isPriceStale(fetchedAt) ? "Price may have changed. View provider for latest price." : null;
+  return isPriceStale(fetchedAt) ? "Price may have changed. View listing for latest price." : null;
 }

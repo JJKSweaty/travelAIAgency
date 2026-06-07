@@ -16,13 +16,16 @@ export async function GET(req: Request) {
   const adults = positiveInt(searchParams.get("adults"), 1);
   const currency = currencyParam(searchParams.get("currency"));
   const travelClass = searchParams.get("travelClass")?.trim() || null;
+  const travelMonth = searchParams.get("travelMonth")?.trim() || null;
+  const tripLengthDays = optionalPositiveInt(searchParams.get("tripLengthDays"));
+  const budget = optionalPositiveInt(searchParams.get("budget"));
 
   if (!origin || !destination || !departureDate) {
     return NextResponse.json({ error: "Missing required flight search parameters" }, { status: 400 });
   }
 
   const links = flightFallbackLinks({ origin, destination, departureDate, returnDate, adults, currency });
-  const cacheKey = travelCacheKey("flights", { origin, destination, departureDate, returnDate, adults, currency, travelClass });
+  const cacheKey = travelCacheKey("flights", { origin, destination, travelMonth, departureDate, returnDate, tripLengthDays, adults, budget, currency, travelClass });
   const cached = getTravelCache<FlightRouteResponse>(cacheKey);
   if (cached) return NextResponse.json(cached);
 
@@ -33,7 +36,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       flights: [],
       links,
-      message: "Live flight providers are not configured. Use a provider search link for current fares."
+      message: "I could not check current flight prices here. Use a search link for current fares."
     });
   }
 
@@ -46,7 +49,7 @@ export async function GET(req: Request) {
       flights = result.flights;
       if (result.message) messages.push(result.message);
     } catch {
-      messages.push("Google Flights provider did not respond.");
+      messages.push("Flight price search did not respond.");
     }
   }
 
@@ -56,14 +59,14 @@ export async function GET(req: Request) {
       flights = result.flights;
       if (result.message) messages.push(result.message);
     } catch {
-      messages.push("Kiwi flight provider did not respond.");
+      messages.push("Flight price search did not respond.");
     }
   }
 
   const payload: FlightRouteResponse = {
     flights,
     links: flights.length ? [] : links,
-    message: flights.length ? undefined : messages[0] || "No structured flight results are available. Use a provider search link for current fares."
+    message: flights.length ? undefined : messages[0] || "I could not find current flight options for this route and month. Use a search link for current fares."
   };
 
   return NextResponse.json(setTravelCache(cacheKey, payload));
@@ -78,6 +81,12 @@ type FlightRouteResponse = {
 function positiveInt(value: string | null, fallback: number) {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function optionalPositiveInt(value: string | null) {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function currencyParam(value: string | null): CurrencyCode {

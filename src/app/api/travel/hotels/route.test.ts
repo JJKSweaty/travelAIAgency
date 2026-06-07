@@ -123,6 +123,6 @@ describe("GET /api/travel/hotels", () => {
     expect(response.status).toBe(200);
     expect(body.hotels).toEqual([]);
     expect(body.links.length).toBeGreaterThan(0);
-    expect(body.message).toMatch(/not configured/i);
+    expect(body.message).toMatch(/could not check current hotel prices/i);
   });
 });

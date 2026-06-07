@@ -48,6 +48,7 @@ export function TripResults() {
         });
         setPlan(normalized);
         writeCurrentTrip(normalized);
+        rememberRecentDestination(normalized.destination.id);
         setSaved(await isTripSaved(normalized.id).catch(() => false));
       }
       void loadCurrent();
@@ -67,14 +68,16 @@ export function TripResults() {
     setIsRefining(intent);
     setRefineError(null);
     try {
+      const planForRefinement = withRecentDestinationExclusions(plan, intent);
       const response = await fetch("/api/refine-trip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan, intent })
+        body: JSON.stringify({ plan: planForRefinement, intent })
       });
       if (!response.ok) throw new Error("Could not refine this trip.");
       const next = (await response.json()) as TripPlan;
       persist({ ...next, selectedStay: next.selectedStay ?? hotelToStay(next), itinerary: next.itinerary.map((day) => ({ ...day, additions: day.additions ?? [], transit: day.transit ?? [] })) });
+      rememberRecentDestination(next.destination.id);
       setSaved(false);
     } catch (err) {
       setRefineError(err instanceof Error ? err.message : "Could not refine this trip.");
@@ -110,20 +113,25 @@ export function TripResults() {
         selectedHotel: hotel
           ? {
               id: hotel.id,
+              providerListingId: hotel.placeId ?? hotel.id,
               name: hotel.name,
-                location: hotel.location,
-                nightlyPrice: hotel.nightlyPrice,
-                source: hotel.source,
-                link: hotel.link,
-                rating: hotel.rating,
-                reviewCount: hotel.reviewCount,
-                imageUrl: hotel.imageUrl,
-                starRating: hotel.starRating,
-                amenities: hotel.amenities,
-                cancellationNote: hotel.cancellationNote,
-                totalPrice: hotel.totalPrice,
-                priceSource: hotel.priceSource
-              }
+              location: hotel.location,
+              nightlyPrice: hotel.nightlyPrice,
+              priceAtSelection: hotel.nightlyPrice,
+              currentPrice: hotel.nightlyPrice,
+              source: hotel.source,
+              link: hotel.link,
+              rating: hotel.rating,
+              reviewCount: hotel.reviewCount,
+              imageUrl: hotel.imageUrl,
+              starRating: hotel.starRating,
+              amenities: hotel.amenities,
+              cancellationNote: hotel.cancellationNote,
+              totalPrice: hotel.totalPrice,
+              totalPriceAtSelection: hotel.totalPrice,
+              currentTotalPrice: hotel.totalPrice,
+              priceSource: hotel.priceSource
+            }
           : plan.selectedHotel
       });
       return;
@@ -397,10 +405,15 @@ function TravelActionCard({ href, icon, title, meta }: { href: string; icon: Rea
 function TripSummaryPanel({ plan }: { plan: TripPlan }) {
   const currency = plan.request.currency;
   const lowestFlight = [...plan.priceComparison.flights].sort((a, b) => a.estimatedPrice - b.estimatedPrice)[0];
-  const selectedHotelPrice = plan.selectedHotel ? (plan.selectedHotel.priceSource === "unavailable" ? "check rates" : `${formatMoney(plan.selectedHotel.nightlyPrice, currency)}/night`) : "";
-  const selectedFlightDetail = plan.selectedFlightQuote?.airline
-    ? `${plan.selectedFlightQuote.airline} ${plan.selectedFlightQuote.departureTime ?? ""} to ${plan.selectedFlightQuote.arrivalTime ?? ""}`.trim()
+  const selectedHotelCurrentPrice = plan.selectedHotel?.currentPrice ?? plan.selectedHotel?.nightlyPrice;
+  const selectedHotelSavedPrice = plan.selectedHotel?.priceAtSelection ?? plan.selectedHotel?.nightlyPrice;
+  const selectedHotelPriceChange = priceChangeCopy(selectedHotelSavedPrice, selectedHotelCurrentPrice, currency);
+  const selectedHotelPrice = plan.selectedHotel
+    ? plan.selectedHotel.priceSource === "unavailable"
+      ? "check rates"
+      : `${formatMoney(selectedHotelCurrentPrice ?? 0, currency)}/night${selectedHotelPriceChange ? ` - ${selectedHotelPriceChange}` : ""}`
     : "";
+  const selectedFlightDetail = "";
   return (
     <Panel title="Trip summary" icon={<Route size={18} />}>
       <div className="grid gap-3 text-sm">
@@ -436,16 +449,18 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
 function TripCostPanel({ plan }: { plan: TripPlan }) {
   const currency = plan.request.currency;
   const nights = Math.max(1, plan.request.tripLengthDays - 1);
-  const selectedHotelNightly = plan.selectedHotel?.nightlyPrice ?? plan.selectedHotelQuote?.estimatedPrice ?? plan.hotels[0]?.nightlyPrice ?? plan.destination.averageNightlyHotel;
-  const selectedFlight = plan.selectedFlightQuote?.estimatedPrice ?? 0;
+  const selectedHotelNightly = plan.selectedHotel?.currentPrice ?? plan.selectedHotel?.nightlyPrice ?? plan.selectedHotelQuote?.estimatedPrice ?? plan.hotels[0]?.nightlyPrice ?? plan.destination.averageNightlyHotel;
+  const selectedFlight = plan.selectedFlightQuote?.currentPrice ?? plan.selectedFlightQuote?.estimatedPrice ?? 0;
   const lodging = Math.round(selectedHotelNightly * nights);
   const localTransport = plan.cars[0] ? Math.round(plan.cars[0].dailyPrice * plan.request.tripLengthDays) : plan.budget.transport;
   const food = plan.budget.food;
   const activities = plan.budget.activities;
   const hotelPriceKnown = plan.selectedHotel?.priceSource !== "unavailable";
+  const hotelPriceChange = priceChangeCopy(plan.selectedHotel?.priceAtSelection ?? plan.selectedHotel?.nightlyPrice, plan.selectedHotel?.currentPrice ?? plan.selectedHotel?.nightlyPrice, currency);
+  const flightPriceChange = priceChangeCopy(plan.selectedFlightQuote?.priceAtSelection ?? plan.selectedFlightQuote?.estimatedPrice, plan.selectedFlightQuote?.currentPrice ?? plan.selectedFlightQuote?.estimatedPrice, currency);
   const rows = [
-    { label: "Flight", value: selectedFlight, detail: plan.selectedFlightQuote ? plan.selectedFlightQuote.displayName : "Not selected yet" },
-    { label: "Hotel", value: hotelPriceKnown ? lodging : 0, detail: hotelPriceKnown ? `${nights} night${nights === 1 ? "" : "s"} at ${formatMoney(selectedHotelNightly, currency)}/night` : "Open the hotel page for live rates" },
+    { label: "Flight", value: selectedFlight, detail: plan.selectedFlightQuote ? flightPriceChange ?? plan.selectedFlightQuote.displayName : "Not selected yet" },
+    { label: "Hotel", value: hotelPriceKnown ? lodging : 0, detail: hotelPriceKnown ? hotelPriceChange ?? `${nights} night${nights === 1 ? "" : "s"} at ${formatMoney(selectedHotelNightly, currency)}/night` : "Open the hotel page for current rates" },
     { label: "Local transport", value: localTransport, detail: plan.cars[0]?.name ?? "Transit and rideshare estimate" },
     { label: "Activities", value: activities, detail: "Itinerary activity estimate" },
     { label: "Food", value: food, detail: "Meals and casual dining estimate" }
@@ -470,6 +485,11 @@ function TripCostPanel({ plan }: { plan: TripPlan }) {
       </div>
     </Panel>
   );
+}
+
+function priceChangeCopy(savedPrice: number | undefined, currentPrice: number | undefined, currency: TripPlan["request"]["currency"]) {
+  if (savedPrice === undefined || currentPrice === undefined || savedPrice === currentPrice) return null;
+  return `Price changed from ${formatMoney(savedPrice, currency)} to ${formatMoney(currentPrice, currency)}`;
 }
 
 function dateSummary(plan: TripPlan) {
@@ -686,7 +706,7 @@ function displayNotes(notes: string[]) {
         .replace("Refined for: cheaper.", "Cheaper search: looked for lower-cost destinations, value stays, public transit, and lower fare packages.")
         .replace("Refined for: next destination.", "Alternative search: reviewed another destination that can fit the same trip style.")
     )
-    .filter((note) => !/fallback|provider|supabase|api/i.test(note));
+    .filter((note) => !/fallback|provider|supabase|api|serpapi|backend|mock|debug|test|raw|ai generated/i.test(note));
 }
 
 function groupItineraryDays(days: ItineraryDay[]) {
@@ -706,4 +726,36 @@ function groupItineraryDays(days: ItineraryDay[]) {
 
 function totalDayCost(days: ItineraryDay[]) {
   return days.reduce((sum, day) => sum + day.estimatedCost + (day.additions ?? []).reduce((additionSum, item) => additionSum + (item.estimatedCost ?? 0), 0), 0);
+}
+
+const recentDestinationIdsKey = "roamly.recentDestinationIds";
+
+function withRecentDestinationExclusions(plan: TripPlan, intent: RefinementIntent): TripPlan {
+  if (intent !== "cheaper" && intent !== "next-destination") return plan;
+  const excludedDestinationIds = Array.from(
+    new Set([...(plan.request.excludedDestinationIds ?? []), ...readRecentDestinationIds(), plan.destination.id])
+  ).slice(-16);
+  return {
+    ...plan,
+    request: {
+      ...plan.request,
+      excludedDestinationIds
+    }
+  };
+}
+
+function rememberRecentDestination(id: string) {
+  if (typeof window === "undefined") return;
+  const next = [id, ...readRecentDestinationIds().filter((item) => item !== id)].slice(0, 16);
+  window.sessionStorage.setItem(recentDestinationIdsKey, JSON.stringify(next));
+}
+
+function readRecentDestinationIds() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(recentDestinationIdsKey);
+    return raw ? (JSON.parse(raw) as string[]) : [];
+  } catch {
+    return [];
+  }
 }

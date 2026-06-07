@@ -1,4 +1,4 @@
-import type { FlightResult, HotelOption, HotelResult, PriceQuote, SelectedHotelOption, SelectedQuoteOption, TripPlan } from "./types";
+import type { FlightResult, HotelOption, HotelResult, PriceQuote, SelectedHotelOption, SelectedQuoteOption, TravelSelectionSearchContext, TripPlan } from "./types";
 
 export type FlightSort = "best-value" | "cheapest" | "fastest";
 export type FlightStopFilter = "any" | "nonstop" | "one-stop";
@@ -167,7 +167,7 @@ export function flightResultsToSearchOptions(results: FlightResult[], fallbackLi
         link,
         source: "live",
         provider: result.source,
-        sourceLabel: `From ${result.source}`,
+        sourceLabel: "Current price",
         fetchedAt: result.fetchedAt,
         bookingToken: result.bookingToken
       };
@@ -198,13 +198,17 @@ export function sortFlightResults(options: FlightSearchOption[], sort: FlightSor
   });
 }
 
-export function flightToSelectedQuote(option: FlightSearchOption): SelectedQuoteOption {
+export function flightToSelectedQuote(option: FlightSearchOption, searchContext?: TravelSelectionSearchContext): SelectedQuoteOption {
+  const price = option.price ?? 0;
   return {
     id: option.id,
+    providerListingId: option.bookingToken ?? option.id,
     category: "flight",
     provider: option.provider,
     displayName: `${option.airline}${option.packageLevel ? ` ${option.packageLevel}` : ""}`,
-    estimatedPrice: option.price ?? 0,
+    estimatedPrice: price,
+    priceAtSelection: price,
+    currentPrice: price,
     unit: "round-trip",
     link: option.link,
     source: option.source,
@@ -214,7 +218,9 @@ export function flightToSelectedQuote(option: FlightSearchOption): SelectedQuote
     durationMinutes: option.durationMinutes ?? undefined,
     stops: option.stops,
     baggage: option.baggage ?? undefined,
-    packageLevel: option.packageLevel ?? undefined
+    packageLevel: option.packageLevel ?? undefined,
+    lastPriceCheckedAt: option.fetchedAt,
+    searchContext
   };
 }
 
@@ -247,7 +253,7 @@ export function buildHotelResults(plan: TripPlan): HotelSearchOption[] {
       rating: hotel.rating,
       reviewCount,
       starRating,
-      description: hotel.description ?? "Real hotel result. Open the partner page to check live rates and availability.",
+      description: hotel.description ?? "Hotel listing with rates and availability to confirm before booking.",
       amenities: normalizeAmenities(amenities, { freeCancellation, breakfastIncluded }),
       cancellationNote,
       freeCancellation,
@@ -303,7 +309,7 @@ export function hotelResultsToSearchOptions(results: HotelResult[], plan: TripPl
         valueScore: hotelValueScore(nightlyPrice, hotel.guestRating, distanceKm, tier),
         source: hotel.source,
         link: hotel.sourceUrl ?? fallbackLinks[0]?.url ?? "",
-        sourceLabel: `From ${hotel.source}`,
+        sourceLabel: "Current listing",
         fetchedAt: hotel.fetchedAt,
         propertyToken: hotel.propertyToken
       };
@@ -337,12 +343,16 @@ export function sortHotelResults(options: HotelSearchOption[], sort: HotelSort) 
   });
 }
 
-export function hotelToSelectedHotel(option: HotelSearchOption): SelectedHotelOption {
+export function hotelToSelectedHotel(option: HotelSearchOption, searchContext?: TravelSelectionSearchContext): SelectedHotelOption {
+  const nightlyPrice = option.nightlyPrice ?? 0;
   return {
     id: option.id,
+    providerListingId: option.propertyToken ?? option.id,
     name: option.name,
     location: option.location,
-    nightlyPrice: option.nightlyPrice ?? 0,
+    nightlyPrice,
+    priceAtSelection: nightlyPrice,
+    currentPrice: nightlyPrice,
     source: option.source,
     link: option.link,
     rating: option.rating ?? undefined,
@@ -352,7 +362,11 @@ export function hotelToSelectedHotel(option: HotelSearchOption): SelectedHotelOp
     amenities: option.amenities,
     cancellationNote: option.cancellationNote ?? undefined,
     totalPrice: option.totalPrice ?? undefined,
-    priceSource: option.priceSource
+    totalPriceAtSelection: option.totalPrice ?? undefined,
+    currentTotalPrice: option.totalPrice ?? undefined,
+    priceSource: option.priceSource,
+    lastPriceCheckedAt: option.fetchedAt,
+    searchContext
   };
 }
 
@@ -479,8 +493,8 @@ function knownDurationForSort(value: number | null) {
   return value === null ? Number.POSITIVE_INFINITY : value;
 }
 
-function sourceLabelFor(value: string) {
-  return value.startsWith("From ") ? value : `From ${value}`;
+function sourceLabelFor(_value: string) {
+  return "Travel listing";
 }
 
 function airlineCode(airline: string) {

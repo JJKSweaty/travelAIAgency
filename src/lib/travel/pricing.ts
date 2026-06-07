@@ -31,10 +31,11 @@ function baselineNightlyHotel(plan: TripPlan) {
 
 function selectedNightlyHotel(plan: TripPlan) {
   if (plan.selectedHotelQuote?.estimatedPrice) return plan.selectedHotelQuote.estimatedPrice;
+  if (plan.selectedHotel?.currentPrice) return plan.selectedHotel.currentPrice;
   if (plan.selectedHotel?.nightlyPrice) return plan.selectedHotel.nightlyPrice;
   return baselineNightlyHotel(plan);
 }
 
 function selectedFlight(plan: TripPlan) {
-  return plan.selectedFlightQuote?.estimatedPrice ?? 0;
+  return plan.selectedFlightQuote?.currentPrice ?? plan.selectedFlightQuote?.estimatedPrice ?? 0;
 }

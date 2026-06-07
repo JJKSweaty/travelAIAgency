@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { writeCurrentTrip } from "@/lib/travel/storage";
 import { formatMoney } from "@/lib/travel/currency";
 import { rememberRecentLocation } from "@/lib/travel/locationSearch";
+import { hasTravelMonth, travelMonthFromRequest, travelMonthRequiredMessage } from "@/lib/travel/travelDates";
 import type { CityTravelPreference, CurrencyCode, Interest, LocationOption, LocationSuggestionMode, TransportPreference, TravelDateMode, TravelStyle, TripPlan, TripRequest } from "@/lib/travel/types";
 
 const interestOptions: { id: Interest; label: string }[] = [
@@ -86,6 +87,11 @@ export function TripPlannerWizard() {
   }
 
   async function submit() {
+    if (!hasTravelMonth(request)) {
+      setError(travelMonthRequiredMessage);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -94,7 +100,10 @@ export function TripPlannerWizard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request)
       });
-      if (!response.ok) throw new Error("Trip details need a quick adjustment before planning.");
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(payload?.error ?? "Trip details need a quick adjustment before planning.");
+      }
       const plan = (await response.json()) as TripPlan;
       writeCurrentTrip(plan);
       router.push("/results");
@@ -353,6 +362,13 @@ function useLocationSuggestions(
       return;
     }
 
+    const cacheKey = locationSuggestionCacheKey(mode, trimmed);
+    const cached = readLocationSuggestionCache(cacheKey);
+    if (cached) {
+      setSuggestions(cached);
+      return;
+    }
+
     const controller = new AbortController();
     const task = window.setTimeout(async () => {
       try {
@@ -361,7 +377,9 @@ function useLocationSuggestions(
         });
         if (!response.ok) return;
         const payload = (await response.json()) as { locations?: LocationOption[] };
-        setSuggestions(payload.locations ?? []);
+        const locations = payload.locations ?? [];
+        writeLocationSuggestionCache(cacheKey, locations);
+        setSuggestions(locations);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setSuggestions([]);
@@ -373,6 +391,31 @@ function useLocationSuggestions(
       window.clearTimeout(task);
     };
   }, [enabled, mode, query, setSuggestions]);
+}
+
+function locationSuggestionCacheKey(mode: LocationSuggestionMode, query: string) {
+  return `roamly.locationSuggestions.${mode}.${query.trim().toLowerCase()}`;
+}
+
+function readLocationSuggestionCache(key: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as LocationOption[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocationSuggestionCache(key: string, locations: LocationOption[]) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(key, JSON.stringify(locations));
+}
+
+function locationSourceLabel(location: LocationOption) {
+  if (location.source === "custom") return "Typed";
+  if (location.airportCode) return location.airportCode;
+  return "City match";
 }
 
 function LocationSuggestionList({
@@ -404,7 +447,7 @@ function LocationSuggestionList({
         >
           <span className="flex items-center justify-between gap-3">
             <span className="font-semibold">{location.label}</span>
-            <span className="shrink-0 text-xs font-medium capitalize text-ink/52">{location.source}</span>
+            <span className="shrink-0 text-xs font-medium text-ink/52">{locationSourceLabel(location)}</span>
           </span>
           <span className="flex flex-wrap items-center gap-2 text-xs text-ink/58">
             {location.costLevel ? <span className="rounded bg-ink/5 px-2 py-1">Cost {location.costLevel}/5</span> : null}
@@ -525,9 +568,10 @@ function LiveBudgetTracker({ tracker, currency }: { tracker: BudgetTracker; curr
 }
 
 function LiveSearchReadiness({ request }: { request: TripRequest }) {
+  const travelMonth = travelMonthFromRequest(request);
   const exactDates = request.dateMode === "exact" && Boolean(request.startDate && request.endDate);
   const destinationReady = !request.preferredDestinationEnabled || Boolean(request.destination?.trim());
-  const ready = exactDates && destinationReady;
+  const ready = Boolean(travelMonth && destinationReady);
 
   return (
     <Card>
@@ -535,15 +579,15 @@ function LiveSearchReadiness({ request }: { request: TripRequest }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="text-lg">Flight and stay search</CardTitle>
-            <CardDescription>{ready ? "Live provider search will run from the comparison pages." : "Exact dates produce the strongest provider search."}</CardDescription>
+            <CardDescription>{ready ? "Current price checks can run from the comparison pages." : "Choose a travel month before building a plan."}</CardDescription>
           </div>
           <Badge variant={ready ? "default" : "secondary"}>{ready ? "Ready" : "Planning"}</Badge>
         </div>
       </CardHeader>
       <CardContent className="grid gap-2 text-sm">
-        <ReadinessRow icon={<CalendarDays size={15} />} label="Dates" value={exactDates ? `${request.startDate} to ${request.endDate}` : "Use exact dates"} ready={exactDates} />
-        <ReadinessRow icon={<Plane size={15} />} label="Flights" value={exactDates ? "Fare search ready" : "Month mode uses links"} ready={exactDates} />
-        <ReadinessRow icon={<Hotel size={15} />} label="Hotels" value={exactDates ? "Rate search ready" : "Month mode uses links"} ready={exactDates} />
+        <ReadinessRow icon={<CalendarDays size={15} />} label="Dates" value={exactDates ? `${request.startDate} to ${request.endDate}` : travelMonth ?? "Choose month"} ready={Boolean(travelMonth)} />
+        <ReadinessRow icon={<Plane size={15} />} label="Flights" value={travelMonth ? "Fare check ready" : "Choose month"} ready={Boolean(travelMonth)} />
+        <ReadinessRow icon={<Hotel size={15} />} label="Hotels" value={travelMonth ? "Rate check ready" : "Choose month"} ready={Boolean(travelMonth)} />
         <ReadinessRow icon={<Search size={15} />} label="Destination" value={destinationReady ? "Ready" : "Choose a destination"} ready={destinationReady} />
       </CardContent>
     </Card>

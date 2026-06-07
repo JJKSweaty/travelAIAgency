@@ -6,20 +6,28 @@ export const HOTEL_PRICE_TTL_MS = 30 * 60 * 1000;
 export type FlightSearchKeyInput = {
   origin: string;
   destination: string;
+  travelMonth?: string | null;
   departureDate: string;
   returnDate?: string | null;
+  tripLengthDays?: number;
   travelers: number;
+  budget?: number;
   currency?: CurrencyCode;
   cabinClass?: string | null;
+  flightFilters?: string | null;
 };
 
 export type HotelSearchKeyInput = {
   destination: string;
+  travelMonth?: string | null;
   checkInDate: string;
   checkOutDate: string;
+  tripLengthDays?: number;
   guests: number;
   rooms: number;
+  budget?: number;
   currency?: CurrencyCode;
+  hotelFilters?: string | null;
 };
 
 export type BrowserSearchCacheEntry =
@@ -30,16 +38,31 @@ export function flightSearchKey(input: FlightSearchKeyInput) {
   return stableSearchKey([
     input.origin,
     input.destination,
+    input.travelMonth ?? "",
     input.departureDate,
     input.returnDate ?? "",
+    input.tripLengthDays ?? "",
     input.travelers,
+    input.budget ?? "",
     input.currency ?? "CAD",
-    input.cabinClass ?? ""
+    input.cabinClass ?? "",
+    input.flightFilters ?? ""
   ]);
 }
 
 export function hotelSearchKey(input: HotelSearchKeyInput) {
-  return stableSearchKey([input.destination, input.checkInDate, input.checkOutDate, input.guests, input.rooms, input.currency ?? "CAD"]);
+  return stableSearchKey([
+    input.destination,
+    input.travelMonth ?? "",
+    input.checkInDate,
+    input.checkOutDate,
+    input.tripLengthDays ?? "",
+    input.guests,
+    input.rooms,
+    input.budget ?? "",
+    input.currency ?? "CAD",
+    input.hotelFilters ?? ""
+  ]);
 }
 
 export function isFresh(fetchedAt: string | undefined, ttlMs: number, now = Date.now()) {

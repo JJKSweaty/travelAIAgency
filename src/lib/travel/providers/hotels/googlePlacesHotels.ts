@@ -40,7 +40,7 @@ export async function searchGooglePlacesHotels(params: GooglePlacesHotelSearchPa
 
   return {
     hotels,
-    message: hotels.length ? undefined : "No Google Places hotel results were returned for this destination."
+    message: hotels.length ? undefined : "I could not find current hotel listings for this destination."
   };
 }
 

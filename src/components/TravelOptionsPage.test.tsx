@@ -35,9 +35,22 @@ describe("TravelOptionsPage", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: /choose your stay/i })).toBeInTheDocument());
     await waitFor(() => expect(screen.getByText("Hotel Mundial")).toBeInTheDocument());
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(screen.getAllByText(/From SerpApi Google Hotels/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Current listing/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Check latest price.")).toBeInTheDocument();
     expect(screen.queryByText(/^Luxury$/i)).not.toBeInTheDocument();
+  });
+
+  it("searches hotels automatically for month trips with representative dates", async () => {
+    mockTravelFetch({ hotels: [hotelResult({ id: "month-hotel", name: "Month Hotel", pricePerNight: 150, totalPrice: 600 })] });
+    window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(monthTripPlan()));
+
+    render(<TravelOptionsPage kind="hotels" />);
+
+    await waitFor(() => expect(screen.getByText("Month Hotel")).toBeInTheDocument());
+    const fetchUrl = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
+    expect(fetchUrl.pathname).toBe("/api/travel/hotels");
+    expect(fetchUrl.searchParams.get("checkInDate")).toBe("2026-07-15");
+    expect(fetchUrl.searchParams.get("checkOutDate")).toBe("2026-07-19");
   });
 
   it("opens saved trips from cached hotel results without fetching", async () => {
@@ -52,7 +65,17 @@ describe("TravelOptionsPage", () => {
         travelers: 2,
         rooms: 1,
         currency: "CAD",
-        hotelSearchKey: hotelSearchKey({ destination: "Lisbon, Portugal", checkInDate: "2026-07-10", checkOutDate: "2026-07-14", guests: 2, rooms: 1, currency: "CAD" }),
+        hotelSearchKey: hotelSearchKey({
+          destination: "Lisbon, Portugal",
+          travelMonth: "2026-07",
+          checkInDate: "2026-07-10",
+          checkOutDate: "2026-07-14",
+          tripLengthDays: 3,
+          guests: 2,
+          rooms: 1,
+          budget: 2000,
+          currency: "CAD"
+        }),
         cachedHotels: [cachedHotel],
         hotelsFetchedAt: fetchedAt
       }
@@ -81,8 +104,11 @@ describe("TravelOptionsPage", () => {
     await waitFor(() => {
       const current = JSON.parse(window.sessionStorage.getItem("roamly.currentTrip") ?? "{}");
       expect(current.selectedHotel.id).toBe("memmo");
+      expect(current.selectedHotel.providerListingId).toBe("property-token");
       expect(current.selectedStay.label).toBe("Memmo Alfama");
       expect(current.selectedHotel.totalPrice).toBe(480);
+      expect(current.selectedHotel.priceAtSelection).toBe(120);
+      expect(current.selectedHotel.currentPrice).toBe(120);
       expect(current.budget.totalEstimated).toBe(1660);
     });
     await waitFor(() => {
@@ -110,7 +136,20 @@ describe("TravelOptionsPage", () => {
 
     expect(screen.getAllByText("Nonstop").length).toBeGreaterThan(0);
     expect(screen.queryByText("TAP Air Portugal")).not.toBeInTheDocument();
-    expect(screen.getAllByText(/From SerpApi Google Flights/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Current price/i).length).toBeGreaterThan(0);
+  });
+
+  it("searches flights automatically for month trips with representative dates", async () => {
+    mockTravelFetch({ flights: [flightResult({ id: "month-flight", airlineName: "Air Canada", flightNumber: "AC 800", totalPrice: 690 })] });
+    window.sessionStorage.setItem("roamly.currentTrip", JSON.stringify(monthTripPlan()));
+
+    render(<TravelOptionsPage kind="flights" />);
+
+    await waitFor(() => expect(screen.getByText("Air Canada")).toBeInTheDocument());
+    const fetchUrl = new URL(String(vi.mocked(fetch).mock.calls[0][0]), "http://localhost");
+    expect(fetchUrl.pathname).toBe("/api/travel/flights");
+    expect(fetchUrl.searchParams.get("departureDate")).toBe("2026-07-15");
+    expect(fetchUrl.searchParams.get("returnDate")).toBe("2026-07-19");
   });
 
   it("selects a live priced flight and updates the trip total", async () => {
@@ -129,8 +168,11 @@ describe("TravelOptionsPage", () => {
     await waitFor(() => {
       const current = JSON.parse(window.sessionStorage.getItem("roamly.currentTrip") ?? "{}");
       expect(current.selectedFlightQuote.airline).toBe("Air Canada");
+      expect(current.selectedFlightQuote.providerListingId).toBe("booking-token");
       expect(current.selectedFlightQuote.departureTime).toBeTruthy();
       expect(current.selectedFlightQuote.estimatedPrice).toBe(640);
+      expect(current.selectedFlightQuote.priceAtSelection).toBe(640);
+      expect(current.selectedFlightQuote.currentPrice).toBe(640);
       expect(current.budget.totalEstimated).toBeGreaterThan(plan.budget.totalEstimated);
     });
     expect(pushMock).toHaveBeenCalledWith("/results");
@@ -151,6 +193,19 @@ function mockTravelFetch(results: { flights?: FlightResult[]; hotels?: HotelResu
       return Response.json({});
     })
   );
+}
+
+function monthTripPlan() {
+  const base = createTripPlan();
+  return createTripPlan({
+    request: {
+      ...base.request,
+      dateMode: "month",
+      startDate: "2026-07",
+      endDate: "",
+      tripLengthDays: 5
+    }
+  });
 }
 
 function flightResult(overrides: Partial<FlightResult> = {}): FlightResult {

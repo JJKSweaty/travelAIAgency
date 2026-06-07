@@ -56,6 +56,14 @@ describe("TripPlannerWizard", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it("blocks trip planning until a travel month is selected", async () => {
+    const user = userEvent.setup();
+    render(<TripPlannerWizard />);
+    await user.click(screen.getByRole("button", { name: /build trip plan/i }));
+    expect(screen.getByText(/choose a travel month so i can find realistic flight and hotel prices/i)).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("reveals destination input when preferred mode is enabled", async () => {
     const user = userEvent.setup();
     render(<TripPlannerWizard />);

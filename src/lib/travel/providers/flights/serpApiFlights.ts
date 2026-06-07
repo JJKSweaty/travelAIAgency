@@ -41,7 +41,7 @@ export async function searchSerpApiFlights(params: SerpApiFlightSearchParams): P
 
   return {
     flights,
-    message: flights.length ? undefined : "No structured Google Flights results were returned for this search."
+    message: flights.length ? undefined : "I could not find current flight options for this exact search."
   };
 }
 

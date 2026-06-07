@@ -40,7 +40,7 @@ export async function searchSerpApiHotels(params: SerpApiHotelSearchParams): Pro
 
   return {
     hotels,
-    message: hotels.length ? undefined : "No Google Hotels results were returned for this search."
+    message: hotels.length ? undefined : "I could not find current hotel options for this exact search."
   };
 }
 

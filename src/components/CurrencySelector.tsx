@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Banknote } from "lucide-react";
 import { currencyOptions } from "@/lib/travel/currency";
 import type { CurrencyCode } from "@/lib/travel/types";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 
 const currencyKey = "roamly.currency";
 
@@ -22,6 +22,7 @@ export function writeCurrencyPreference(currency: CurrencyCode) {
 
 export function CurrencySelector() {
   const [currency, setCurrency] = useState<CurrencyCode>(() => readCurrencyPreference() ?? "CAD");
+  const selected = currencyOptions.find((option) => option.code === currency) ?? currencyOptions[0];
 
   function changeCurrency(value: string) {
     const next = value as CurrencyCode;
@@ -31,11 +32,19 @@ export function CurrencySelector() {
 
   return (
     <Select value={currency} onValueChange={changeCurrency}>
-      <SelectTrigger className="h-10 w-[132px] gap-2 border-ink/10 bg-white px-3 font-semibold shadow-subtle" aria-label="Currency">
-        <Banknote size={16} className="shrink-0 text-reef" aria-hidden />
-        <SelectValue aria-label="Currency" />
+      <SelectTrigger
+        className="h-10 w-[118px] shrink-0 justify-start gap-2 rounded-md border-ink/10 bg-white px-2.5 text-ink shadow-subtle hover:border-reef/40 hover:bg-paper/70 data-[state=open]:border-reef/50 data-[state=open]:ring-2 data-[state=open]:ring-reef/15"
+        aria-label={`Currency, ${selected.label}`}
+      >
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-reef/10 text-reef">
+          <Banknote size={15} aria-hidden />
+        </span>
+        <span className="grid min-w-0 text-left leading-none">
+          <span className="text-sm font-semibold">{selected.code}</span>
+          <span className="mt-0.5 truncate text-[11px] font-medium text-ink/52">Currency</span>
+        </span>
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className="w-[220px]">
         {currencyOptions.map((option) => (
           <SelectItem key={option.code} value={option.code}>
             <span className="flex min-w-0 items-center gap-2">

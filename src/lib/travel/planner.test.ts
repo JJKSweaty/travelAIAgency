@@ -6,6 +6,8 @@ const request: TripRequest = {
   origin: "Toronto",
   preferredDestinationEnabled: true,
   destination: "Lisbon",
+  dateMode: "month",
+  startDate: "2026-07",
   tripLengthDays: 4,
   totalBudget: 2400,
   travelers: 2,

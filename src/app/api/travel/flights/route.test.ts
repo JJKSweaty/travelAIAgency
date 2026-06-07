@@ -133,6 +133,6 @@ describe("GET /api/travel/flights", () => {
     expect(response.status).toBe(200);
     expect(body.flights).toEqual([]);
     expect(body.links.length).toBeGreaterThan(0);
-    expect(body.message).toMatch(/not configured/i);
+    expect(body.message).toMatch(/could not check current flight prices/i);
   });
 });

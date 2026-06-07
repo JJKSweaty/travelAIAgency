@@ -286,11 +286,28 @@ export type TripStaySelection = {
   location: string;
 };
 
+export type TravelSelectionSearchContext = {
+  origin?: string;
+  destination?: string;
+  travelMonth?: string | null;
+  departureDate?: string;
+  returnDate?: string;
+  tripLengthDays?: number;
+  travelers?: number;
+  budget?: number;
+  currency?: CurrencyCode;
+  searchKey?: string;
+  selectedAt?: string;
+};
+
 export type SelectedHotelOption = {
   id: string;
+  providerListingId?: string | null;
   name: string;
   location: string;
   nightlyPrice: number;
+  priceAtSelection?: number;
+  currentPrice?: number;
   source: string;
   link: string;
   rating?: number;
@@ -300,15 +317,22 @@ export type SelectedHotelOption = {
   amenities?: string[];
   cancellationNote?: string;
   totalPrice?: number;
+  totalPriceAtSelection?: number;
+  currentTotalPrice?: number;
   priceSource?: HotelOption["priceSource"];
+  lastPriceCheckedAt?: string;
+  searchContext?: TravelSelectionSearchContext;
 };
 
 export type SelectedQuoteOption = {
   id: string;
+  providerListingId?: string | null;
   category: PriceQuote["category"];
   provider: string;
   displayName: string;
   estimatedPrice: number;
+  priceAtSelection?: number;
+  currentPrice?: number;
   unit: PriceQuote["unit"];
   link: string;
   source: PriceQuote["source"];
@@ -320,6 +344,8 @@ export type SelectedQuoteOption = {
   stops?: number;
   baggage?: string;
   packageLevel?: string;
+  lastPriceCheckedAt?: string;
+  searchContext?: TravelSelectionSearchContext;
 };
 
 export type TripPlan = {
@@ -355,14 +381,17 @@ export type TravelSearchCache = {
   tripId?: string;
   origin?: string;
   destination?: string;
+  travelMonth?: string | null;
   dates?: {
     departureDate?: string;
     returnDate?: string;
     checkInDate?: string;
     checkOutDate?: string;
   };
+  tripLengthDays?: number;
   travelers?: number;
   rooms?: number;
+  budget?: number;
   currency?: CurrencyCode;
   cabinClass?: string | null;
   flightSearchKey?: string;

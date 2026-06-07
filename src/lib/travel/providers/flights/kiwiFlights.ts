@@ -14,7 +14,7 @@ export type KiwiFlightSearchParams = {
 export async function searchKiwiFlights(params: KiwiFlightSearchParams): Promise<{ flights: FlightResult[]; message?: string }> {
   const [originLocation, destinationLocation] = await Promise.all([resolveKiwiLocation(params.apiKey, params.origin), resolveKiwiLocation(params.apiKey, params.destination)]);
   if (!originLocation || !destinationLocation) {
-    return { flights: [], message: "Kiwi could not resolve the origin or destination." };
+    return { flights: [], message: "I could not match that route to current flight listings." };
   }
 
   const searchParams = new URLSearchParams({
@@ -43,7 +43,7 @@ export async function searchKiwiFlights(params: KiwiFlightSearchParams): Promise
 
   return {
     flights,
-    message: flights.length ? undefined : "No structured Kiwi flight results were returned for this search."
+    message: flights.length ? undefined : "I could not find current flight options for this exact search."
   };
 }
 

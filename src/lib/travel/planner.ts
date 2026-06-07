@@ -1,6 +1,7 @@
 import { allocateBudget } from "./budget";
 import { isOpenRouterConfigured, OpenRouterItineraryGenerator } from "./ai";
 import { convertUsdFields, formatMoney, fromUsd, normalizeCurrency, toUsd } from "./currency";
+import { hasTravelMonth, travelMonthRequiredMessage } from "./travelDates";
 import { buildDayTransitPlans } from "./transit";
 import {
   type AttractionProvider,
@@ -30,6 +31,10 @@ const travelPriceProvider: TravelPriceProvider = new CascadingTravelPriceProvide
 const itineraryGenerator = new OpenRouterItineraryGenerator();
 
 export async function planTrip(request: TripRequest): Promise<TripPlan> {
+  if (!hasTravelMonth(request)) {
+    throw new Error(travelMonthRequiredMessage);
+  }
+
   const currency = normalizeCurrency(request.currency);
   const displayRequest: TripRequest = { ...request, currency };
   const planningRequest: TripRequest = { ...displayRequest, totalBudget: toUsd(displayRequest.totalBudget, currency) };

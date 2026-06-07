@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/travel/currency";
 import { flightFallbackLinks, hotelFallbackLinks } from "@/lib/travel/deepLinks";
 import { applyTripSelectionsToBudget } from "@/lib/travel/pricing";
+import { travelMonthFromRequest } from "@/lib/travel/travelDates";
 import {
   FLIGHT_SEARCH_TTL_MS,
   HOTEL_PRICE_TTL_MS,
@@ -135,7 +136,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         loading: false,
         searched: true,
         links: kind === "flights" ? fallbackFlightLinksForPlan(plan) : fallbackHotelLinksForPlan(plan),
-        message: "Live provider search requires exact travel dates. Update the trip dates before refreshing prices."
+        message: "Choose a travel month so I can find realistic flight and hotel prices."
       });
       return;
     }
@@ -158,7 +159,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
           loading: false,
           searched: true,
           links: nextLinks,
-          message: body.error ?? body.message ?? "The travel provider request failed."
+          message: body.error ?? body.message ?? "I could not check current prices for this search."
         });
         return;
       }
@@ -188,7 +189,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         loading: false,
         searched: true,
         links: request.fallbackLinks,
-        message: "The travel provider request failed. Use a provider search link for the latest options."
+        message: "I could not check current prices for this search. Use a search link for the latest options."
       });
     }
   }, [kind, persistProviderCache, plan]);
@@ -210,7 +211,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
           loading: false,
           searched: true,
           links,
-          message: "Live provider search requires exact travel dates. Use a provider search link or rebuild the trip with exact dates."
+          message: "Choose a travel month so I can find realistic flight and hotel prices."
         });
         setFlightResults([]);
         setHotelResults([]);
@@ -223,7 +224,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         loading: !cached && autoSearchKeyRef.current !== autoSearchKey,
         searched: Boolean(cached),
         links: request.fallbackLinks,
-        message: cached ? undefined : autoSearchKeyRef.current === autoSearchKey ? "Provider search did not return structured results. Use a provider link or refresh again." : "Checking current provider prices for these exact inputs."
+        message: cached ? undefined : autoSearchKeyRef.current === autoSearchKey ? "I could not find current options for this exact search. Use a search link or refresh again." : "Checking current prices for these trip dates."
       });
       setFlightResults(kind === "flights" ? cached?.flights ?? [] : []);
       setHotelResults(kind === "hotels" ? cached?.hotels ?? [] : []);
@@ -240,13 +241,15 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
   function selectFlight(option: FlightSearchOption) {
     if (!plan) return;
     if (!option.hasKnownPrice) return;
-    persist({ ...plan, selectedFlightQuote: flightToSelectedQuote(option) });
+    const request = flightProviderRequest(plan);
+    persist({ ...plan, selectedFlightQuote: flightToSelectedQuote(option, selectionSearchContext(plan, request?.searchKey)) });
     router.push("/results");
   }
 
   function selectHotel(option: HotelSearchOption) {
     if (!plan) return;
-    const selectedHotel = hotelToSelectedHotel(option);
+    const request = hotelProviderRequest(plan);
+    const selectedHotel = hotelToSelectedHotel(option, selectionSearchContext(plan, request?.searchKey));
     persist({
       ...plan,
       selectedHotelQuote: undefined,
@@ -358,7 +361,7 @@ function FlightResultsExperience({
         <div className="grid content-start gap-4">
           <div className="rounded-lg border border-ink/10 bg-white p-3 shadow-subtle">
             <div className="grid gap-3 md:grid-cols-3">
-              <FlightSortButton label="Best value" active={sort === "best-value"} onClick={() => setSort("best-value")} detail={bestValue ? flightPriceDetail(bestValue, currency) : "Live provider results"} />
+              <FlightSortButton label="Best value" active={sort === "best-value"} onClick={() => setSort("best-value")} detail={bestValue ? flightPriceDetail(bestValue, currency) : "Current prices"} />
               <FlightSortButton label="Cheapest" active={sort === "cheapest"} onClick={() => setSort("cheapest")} detail={cheapest ? flightPriceDetail(cheapest, currency) : "Lowest fare"} />
               <FlightSortButton label="Fastest" active={sort === "fastest"} onClick={() => setSort("fastest")} detail={fastest?.durationMinutes ? formatDuration(fastest.durationMinutes) : "Shortest route"} />
             </div>
@@ -368,7 +371,7 @@ function FlightResultsExperience({
             <p className="text-sm font-semibold text-ink/62">
               {visibleOptions.length} flight{visibleOptions.length === 1 ? "" : "s"} for this trip
             </p>
-            <Badge variant="secondary">{latestFetchedAt ? updatedAgo(latestFetchedAt) : "Live provider results"}</Badge>
+            <Badge variant="secondary">{latestFetchedAt ? updatedAgo(latestFetchedAt) : "Current prices"}</Badge>
           </div>
 
           {providerSearch.loading ? (
@@ -379,17 +382,22 @@ function FlightResultsExperience({
                 key={option.id}
                 option={option}
                 currency={currency}
-                selected={plan.selectedFlightQuote?.id === option.id || plan.selectedFlightQuote?.id === option.sourceQuoteId}
+                selected={
+                  plan.selectedFlightQuote?.id === option.id ||
+                  plan.selectedFlightQuote?.id === option.sourceQuoteId ||
+                  plan.selectedFlightQuote?.providerListingId === option.bookingToken ||
+                  plan.selectedFlightQuote?.providerListingId === option.id
+                }
                 onSelect={() => onSelect(option)}
               />
             ))
           ) : (
             <EmptyState
-              title={options.length ? "No flights match these filters" : "No live flights found"}
+              title={options.length ? "No flights match these filters" : "No current flights found"}
               description={
                 options.length
                   ? "Clear a filter or switch back to Best value to see more routes for this trip."
-                  : providerSearch.message ?? "The live provider search did not return structured flight results for this trip."
+                  : providerSearch.message ?? "I could not find current flight options for this trip."
               }
               links={options.length ? [] : providerSearch.links}
               actionLabel={options.length ? "Reset filters" : "Refresh prices"}
@@ -419,7 +427,7 @@ function HotelResultsExperience({
 }) {
   const currency = plan.request.currency;
   const nights = tripNights(plan);
-  const options = useMemo(() => hotelResultsToSearchOptions(results, plan, providerSearch.links), [plan, providerSearch.links, results]);
+  const options = useMemo(() => preferImageBackedHotelOptions(hotelResultsToSearchOptions(results, plan, providerSearch.links)), [plan, providerSearch.links, results]);
   const [sort, setSort] = useState<HotelSort>("best-value");
   const [filters, setFilters] = useState<HotelFilterState>({
     freeCancellation: false,
@@ -505,7 +513,12 @@ function HotelResultsExperience({
                 key={option.id}
                 option={option}
                 currency={currency}
-                selected={plan.selectedHotel?.id === option.id || plan.selectedStay?.label === option.name}
+                selected={
+                  plan.selectedHotel?.id === option.id ||
+                  plan.selectedHotel?.providerListingId === option.propertyToken ||
+                  plan.selectedHotel?.providerListingId === option.id ||
+                  plan.selectedStay?.label === option.name
+                }
                 onSelect={() => onSelect(option)}
               />
             ))
@@ -515,7 +528,7 @@ function HotelResultsExperience({
               description={
                 options.length
                   ? "Clear a filter or switch to Best value to restore the stay list."
-                  : providerSearch.message ?? "The live provider search did not return structured hotel results for this trip."
+                  : providerSearch.message ?? "I could not find current hotel options for this trip."
               }
               links={options.length ? [] : providerSearch.links}
               actionLabel={options.length ? "Reset filters" : "Refresh prices"}
@@ -719,7 +732,7 @@ function FlightCard({ option, currency, selected, onSelect }: { option: FlightSe
               <>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/52">Round-trip</p>
                 <p className="mt-1 text-3xl font-semibold">{formatMoney(option.price, currency)}</p>
-                <p className="mt-1 text-xs text-ink/52">Live provider fare</p>
+                <p className="mt-1 text-xs text-ink/52">Current fare</p>
               </>
             ) : (
               <>
@@ -778,14 +791,14 @@ function HotelCard({ option, currency, selected, onSelect }: { option: HotelSear
               {option.hasKnownPrice ? (
                 <>
                   <p className="text-sm font-semibold text-ink">
-                    {option.nightlyPrice !== null ? formatMoney(option.nightlyPrice, currency) : "Rate shown by provider"} <span className="text-xs font-medium text-ink/48">/ night</span>
+                    {option.nightlyPrice !== null ? formatMoney(option.nightlyPrice, currency) : "Rate shown by listing"} <span className="text-xs font-medium text-ink/48">/ night</span>
                   </p>
                   {option.totalPrice !== null ? <p className="mt-1 text-2xl font-semibold">{formatMoney(option.totalPrice, currency)}</p> : null}
-                  <p className="text-xs text-ink/52">Live provider price</p>
+                  <p className="text-xs text-ink/52">Current price</p>
                 </>
               ) : (
                 <>
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/52">Live rates</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/52">Current rates</p>
                   <p className="mt-1 text-2xl font-semibold">Check latest price.</p>
                 </>
               )}
@@ -813,7 +826,7 @@ function HotelCard({ option, currency, selected, onSelect }: { option: HotelSear
           ) : null}
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink/10 pt-4">
-            <p className="text-sm font-medium text-ink/62">{option.cancellationNote ?? "Check terms on the provider site."}</p>
+            <p className="text-sm font-medium text-ink/62">{option.cancellationNote ?? "Check terms before booking."}</p>
             <div className="flex flex-wrap gap-2">
               {option.link ? (
                 <Button asChild variant="outline" size="sm">
@@ -833,6 +846,14 @@ function HotelCard({ option, currency, selected, onSelect }: { option: HotelSear
       </CardContent>
     </Card>
   );
+}
+
+function preferImageBackedHotelOptions(options: HotelSearchOption[]) {
+  const withImages = options.filter((option) => Boolean(option.imageUrl));
+  if (withImages.length >= 3) return withImages;
+  if (!withImages.length) return options;
+  const withoutImages = options.filter((option) => !option.imageUrl);
+  return [...withImages, ...withoutImages];
 }
 
 function OptionsTopBar({ onBack }: { onBack: () => void }) {
@@ -872,17 +893,17 @@ function ProviderStatusPanel({
 }) {
   const noun = kind === "flights" ? "flight" : "stay";
   const status = providerSearch.loading
-    ? "Searching providers"
+    ? "Searching prices"
     : count > 0
       ? `${count} current ${noun}${count === 1 ? "" : "s"}`
       : providerSearch.searched
-        ? "Provider links ready"
+        ? "Search links ready"
         : "Ready to search";
   const statusDetail = providerSearch.loading
     ? kind === "flights" ? "Checking flight fares for these dates." : "Checking hotel rates for these dates."
     : latestFetchedAt
       ? updatedAgo(latestFetchedAt)
-      : providerSearch.message ?? "Use refresh to check current provider data.";
+      : providerSearch.message ?? "Use refresh to check current prices.";
   const icon = providerSearch.loading ? <Clock size={15} aria-hidden /> : count > 0 ? <CheckCircle2 size={15} aria-hidden /> : <ExternalLink size={15} aria-hidden />;
 
   return (
@@ -1091,13 +1112,16 @@ function readFreshProviderCache(kind: TravelOptionsPageProps["kind"], request: P
 }
 
 function withProviderCache(args: { kind: "flights"; plan: TripPlan; searchKey: string; fetchedAt: string; flights: FlightResult[] } | { kind: "hotels"; plan: TripPlan; searchKey: string; fetchedAt: string; hotels: HotelResult[] }): TripPlan {
-  const dates = exactTravelDates(args.plan);
-  const rooms = Math.max(1, Math.ceil(args.plan.request.travelers / 2));
+  const plan = refreshSelectedPrices(args);
+  const dates = providerTravelDates(plan);
+  const rooms = Math.max(1, Math.ceil(plan.request.travelers / 2));
+  const travelMonth = travelMonthFromRequest(plan.request);
   const base = {
-    ...(args.plan.travelSearchCache ?? {}),
-    tripId: args.plan.id,
-    origin: args.plan.request.origin,
-    destination: destinationLabel(args.plan),
+    ...(plan.travelSearchCache ?? {}),
+    tripId: plan.id,
+    origin: plan.request.origin,
+    destination: destinationLabel(plan),
+    travelMonth,
     dates: dates
       ? {
           departureDate: dates.departureDate,
@@ -1105,16 +1129,18 @@ function withProviderCache(args: { kind: "flights"; plan: TripPlan; searchKey: s
           checkInDate: dates.departureDate,
           checkOutDate: dates.returnDate
         }
-      : args.plan.travelSearchCache?.dates,
-    travelers: args.plan.request.travelers,
+        : plan.travelSearchCache?.dates,
+    tripLengthDays: plan.request.tripLengthDays,
+    travelers: plan.request.travelers,
     rooms,
-    currency: args.plan.request.currency,
+    budget: plan.request.totalBudget,
+    currency: plan.request.currency,
     cabinClass: null
   };
 
   return args.kind === "flights"
     ? {
-        ...args.plan,
+        ...plan,
         travelSearchCache: {
           ...base,
           flightSearchKey: args.searchKey,
@@ -1123,7 +1149,7 @@ function withProviderCache(args: { kind: "flights"; plan: TripPlan; searchKey: s
         }
       }
     : {
-        ...args.plan,
+        ...plan,
         travelSearchCache: {
           ...base,
           hotelSearchKey: args.searchKey,
@@ -1133,25 +1159,87 @@ function withProviderCache(args: { kind: "flights"; plan: TripPlan; searchKey: s
       };
 }
 
+function refreshSelectedPrices(args: ProviderCacheArgs): TripPlan {
+  if (args.kind === "flights") {
+    const selected = args.plan.selectedFlightQuote;
+    if (!selected) return args.plan;
+    const match = args.flights.find((flight) => selected.id === flight.id || selected.providerListingId === flight.bookingToken || selected.providerListingId === flight.id);
+    const currentPrice = match?.totalPrice ?? match?.pricePerTraveler ?? null;
+    if (!match || currentPrice === null) return args.plan;
+    return {
+      ...args.plan,
+      selectedFlightQuote: {
+        ...selected,
+        estimatedPrice: currentPrice,
+        currentPrice,
+        lastPriceCheckedAt: args.fetchedAt,
+        searchContext: selected.searchContext ?? selectionSearchContext(args.plan, args.searchKey)
+      }
+    };
+  }
+
+  const selected = args.plan.selectedHotel;
+  if (!selected) return args.plan;
+  const match = args.hotels.find((hotel) => selected.id === hotel.id || selected.providerListingId === hotel.propertyToken || selected.providerListingId === hotel.id || selected.name === hotel.name);
+  if (!match) return args.plan;
+  const currentPrice = match.pricePerNight ?? (match.totalPrice !== null ? Math.round(match.totalPrice / Math.max(1, args.plan.request.tripLengthDays - 1)) : null);
+  if (currentPrice === null) return args.plan;
+  return {
+    ...args.plan,
+    selectedHotel: {
+      ...selected,
+      currentPrice,
+      currentTotalPrice: match.totalPrice ?? selected.currentTotalPrice,
+      imageUrl: selected.imageUrl ?? match.imageUrl ?? undefined,
+      lastPriceCheckedAt: args.fetchedAt,
+      searchContext: selected.searchContext ?? selectionSearchContext(args.plan, args.searchKey)
+    }
+  };
+}
+
+function selectionSearchContext(plan: TripPlan, searchKey?: string) {
+  const dates = providerTravelDates(plan);
+  return {
+    origin: plan.request.origin,
+    destination: destinationLabel(plan),
+    travelMonth: travelMonthFromRequest(plan.request),
+    departureDate: dates?.departureDate,
+    returnDate: dates?.returnDate,
+    tripLengthDays: plan.request.tripLengthDays,
+    travelers: plan.request.travelers,
+    budget: plan.request.totalBudget,
+    currency: plan.request.currency,
+    searchKey,
+    selectedAt: new Date().toISOString()
+  };
+}
+
 function flightProviderRequest(plan: TripPlan): ProviderRouteRequest | null {
-  const dates = exactTravelDates(plan);
+  const dates = providerTravelDates(plan);
   if (!dates) return null;
   const origin = airportIdFor(plan.request.origin);
   const destination = airportIdFor(plan.destination.name);
+  const travelMonth = travelMonthFromRequest(plan.request);
   const params = new URLSearchParams({
     origin,
     destination,
     departureDate: dates.departureDate,
     returnDate: dates.returnDate,
     adults: String(Math.max(1, plan.request.travelers)),
-    currency: plan.request.currency ?? "CAD"
+    currency: plan.request.currency ?? "CAD",
+    tripLengthDays: String(Math.max(1, plan.request.tripLengthDays)),
+    budget: String(Math.max(0, plan.request.totalBudget))
   });
+  if (travelMonth) params.set("travelMonth", travelMonth);
   const searchKey = flightSearchKey({
     origin,
     destination,
+    travelMonth,
     departureDate: dates.departureDate,
     returnDate: dates.returnDate,
+    tripLengthDays: Math.max(1, plan.request.tripLengthDays),
     travelers: Math.max(1, plan.request.travelers),
+    budget: Math.max(0, plan.request.totalBudget),
     currency: plan.request.currency ?? "CAD",
     cabinClass: null
   });
@@ -1160,23 +1248,30 @@ function flightProviderRequest(plan: TripPlan): ProviderRouteRequest | null {
 }
 
 function hotelProviderRequest(plan: TripPlan): ProviderRouteRequest | null {
-  const dates = exactTravelDates(plan);
+  const dates = providerTravelDates(plan);
   if (!dates) return null;
   const rooms = Math.max(1, Math.ceil(plan.request.travelers / 2));
+  const travelMonth = travelMonthFromRequest(plan.request);
   const params = new URLSearchParams({
     destination: destinationLabel(plan),
     checkInDate: dates.departureDate,
     checkOutDate: dates.returnDate,
     adults: String(Math.max(1, plan.request.travelers)),
     rooms: String(rooms),
-    currency: plan.request.currency ?? "CAD"
+    currency: plan.request.currency ?? "CAD",
+    tripLengthDays: String(Math.max(1, plan.request.tripLengthDays)),
+    budget: String(Math.max(0, plan.request.totalBudget))
   });
+  if (travelMonth) params.set("travelMonth", travelMonth);
   const searchKey = hotelSearchKey({
     destination: destinationLabel(plan),
+    travelMonth,
     checkInDate: dates.departureDate,
     checkOutDate: dates.returnDate,
+    tripLengthDays: Math.max(1, plan.request.tripLengthDays),
     guests: Math.max(1, plan.request.travelers),
     rooms,
+    budget: Math.max(0, plan.request.totalBudget),
     currency: plan.request.currency ?? "CAD"
   });
   const fallbackLinks = fallbackHotelLinksForPlan(plan);
@@ -1184,7 +1279,7 @@ function hotelProviderRequest(plan: TripPlan): ProviderRouteRequest | null {
 }
 
 function fallbackFlightLinksForPlan(plan: TripPlan): ProviderSearchLink[] {
-  const dates = exactTravelDates(plan);
+  const dates = providerTravelDates(plan);
   return flightFallbackLinks({
     origin: airportIdFor(plan.request.origin),
     destination: airportIdFor(plan.destination.name),
@@ -1196,7 +1291,7 @@ function fallbackFlightLinksForPlan(plan: TripPlan): ProviderSearchLink[] {
 }
 
 function fallbackHotelLinksForPlan(plan: TripPlan): ProviderSearchLink[] {
-  const dates = exactTravelDates(plan);
+  const dates = providerTravelDates(plan);
   return hotelFallbackLinks({
     destination: destinationLabel(plan),
     checkInDate: dates?.departureDate ?? plan.request.startDate,
@@ -1206,12 +1301,25 @@ function fallbackHotelLinksForPlan(plan: TripPlan): ProviderSearchLink[] {
   });
 }
 
-function exactTravelDates(plan: TripPlan) {
-  if (!isDateOnly(plan.request.startDate)) return null;
-  return {
-    departureDate: plan.request.startDate,
-    returnDate: isDateOnly(plan.request.endDate) ? plan.request.endDate : addDays(plan.request.startDate, Math.max(1, plan.request.tripLengthDays - 1))
-  };
+function providerTravelDates(plan: TripPlan) {
+  if (isDateOnly(plan.request.startDate)) {
+    return {
+      departureDate: plan.request.startDate,
+      returnDate: isDateOnly(plan.request.endDate) ? plan.request.endDate : addDays(plan.request.startDate, Math.max(1, plan.request.tripLengthDays - 1))
+    };
+  }
+
+  const monthMatch = /^(\d{4})-(\d{2})$/.exec(plan.request.startDate ?? "");
+  if (monthMatch) {
+    const [, year, month] = monthMatch;
+    const departureDate = `${year}-${month}-15`;
+    return {
+      departureDate,
+      returnDate: addDays(departureDate, Math.max(1, plan.request.tripLengthDays - 1))
+    };
+  }
+
+  return null;
 }
 
 function destinationLabel(plan: TripPlan) {
