@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTravelCache, setTravelCache, travelCacheKey } from "@/lib/travel/cache";
 import { flightFallbackLinks } from "@/lib/travel/deepLinks";
+import { searchKiwiFlights } from "@/lib/travel/providers/flights/kiwiFlights";
 import { searchSerpApiFlights } from "@/lib/travel/providers/flights/serpApiFlights";
 import type { CurrencyCode, FlightResult } from "@/lib/travel/types";
 
@@ -26,25 +27,46 @@ export async function GET(req: Request) {
   if (cached) return NextResponse.json(cached);
 
   const serpApiKey = process.env.SERPAPI_KEY;
+  const kiwiApiKey = process.env.KIWI_TEQUILA_API_KEY ?? process.env.TEQUILA_API_KEY;
 
-  if (!serpApiKey) {
-    return NextResponse.json({ error: "SERPAPI_KEY is not configured", flights: [], links }, { status: 500 });
+  if (!serpApiKey && !kiwiApiKey) {
+    return NextResponse.json({
+      flights: [],
+      links,
+      message: "Live flight providers are not configured. Use a provider search link for current fares."
+    });
   }
 
-  try {
-    const result = await searchSerpApiFlights({ apiKey: serpApiKey, origin, destination, departureDate, returnDate, adults, currency, travelClass });
-    const flights = result.flights;
+  const messages: string[] = [];
+  let flights: FlightResult[] = [];
 
-    const payload: FlightRouteResponse = {
-      flights,
-      links: flights.length ? [] : links,
-      message: flights.length ? undefined : result.message || "No structured SerpApi Google Flights results are available. Use a provider search link for the latest options."
-    };
-
-    return NextResponse.json(setTravelCache(cacheKey, payload));
-  } catch {
-    return NextResponse.json({ error: "Flight provider request failed", flights: [], links }, { status: 502 });
+  if (serpApiKey) {
+    try {
+      const result = await searchSerpApiFlights({ apiKey: serpApiKey, origin, destination, departureDate, returnDate, adults, currency, travelClass });
+      flights = result.flights;
+      if (result.message) messages.push(result.message);
+    } catch {
+      messages.push("Google Flights provider did not respond.");
+    }
   }
+
+  if (!flights.length && kiwiApiKey) {
+    try {
+      const result = await searchKiwiFlights({ apiKey: kiwiApiKey, origin, destination, departureDate, returnDate, adults, currency });
+      flights = result.flights;
+      if (result.message) messages.push(result.message);
+    } catch {
+      messages.push("Kiwi flight provider did not respond.");
+    }
+  }
+
+  const payload: FlightRouteResponse = {
+    flights,
+    links: flights.length ? [] : links,
+    message: flights.length ? undefined : messages[0] || "No structured flight results are available. Use a provider search link for current fares."
+  };
+
+  return NextResponse.json(setTravelCache(cacheKey, payload));
 }
 
 type FlightRouteResponse = {

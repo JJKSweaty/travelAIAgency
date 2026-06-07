@@ -21,8 +21,7 @@ describe("TravelOptionsPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("does not call hotel search on open and fetches only after Refresh prices", async () => {
-    const user = userEvent.setup();
+  it("searches hotels automatically for exact-date trips", async () => {
     mockTravelFetch({
       hotels: [
         hotelResult({ id: "hotel-mundial", name: "Hotel Mundial", pricePerNight: 90, totalPrice: 360 }),
@@ -34,8 +33,6 @@ describe("TravelOptionsPage", () => {
     render(<TravelOptionsPage kind="hotels" />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: /choose your stay/i })).toBeInTheDocument());
-    expect(fetch).not.toHaveBeenCalled();
-    await user.click(screen.getAllByRole("button", { name: /refresh prices/i })[0]);
     await waitFor(() => expect(screen.getByText("Hotel Mundial")).toBeInTheDocument());
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(screen.getAllByText(/From SerpApi Google Hotels/i).length).toBeGreaterThan(0);
@@ -78,7 +75,6 @@ describe("TravelOptionsPage", () => {
     render(<TravelOptionsPage kind="hotels" />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: /choose your stay/i })).toBeInTheDocument());
-    await user.click(screen.getAllByRole("button", { name: /refresh prices/i })[0]);
     await waitFor(() => expect(screen.getByText("Memmo Alfama")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /select stay/i }));
 
@@ -109,8 +105,6 @@ describe("TravelOptionsPage", () => {
     render(<TravelOptionsPage kind="flights" />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: /toronto to lisbon/i })).toBeInTheDocument());
-    expect(fetch).not.toHaveBeenCalled();
-    await user.click(screen.getAllByRole("button", { name: /refresh prices/i })[0]);
     await waitFor(() => expect(screen.getByText("Air Canada")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /^nonstop$/i }));
 
@@ -128,7 +122,6 @@ describe("TravelOptionsPage", () => {
     render(<TravelOptionsPage kind="flights" />);
 
     await waitFor(() => expect(screen.getByRole("heading", { name: /toronto to lisbon/i })).toBeInTheDocument());
-    await user.click(screen.getAllByRole("button", { name: /refresh prices/i })[0]);
     await waitFor(() => expect(screen.getByText("Air Canada")).toBeInTheDocument());
     const card = screen.getByText("Air Canada").closest(".rounded-lg") ?? document.body;
     await user.click(within(card as HTMLElement).getByRole("button", { name: /select flight/i }));

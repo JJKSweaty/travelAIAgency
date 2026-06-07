@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { AlertCircle, ArrowRight, CheckCircle2, CloudUpload, KeyRound, Lock, LogIn, LogOut, Mail, MapPinned, Plane, ShieldCheck, Sparkles, UserPlus } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, CloudUpload, KeyRound, Lock, LogIn, LogOut, Mail, MapPinned, Plane, ShieldCheck, UserPlus } from "lucide-react";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase/client";
 import { importGuestTrips, readSavedTrips } from "@/lib/travel/storage";
 import { Badge } from "@/components/ui/badge";
@@ -170,7 +170,7 @@ export function AuthPage() {
                 <CardDescription>{state.email ? "Your saved trips are ready whenever you come back." : "Sign in to save trips, compare choices, and access details later."}</CardDescription>
               </div>
               <span className="flex size-10 items-center justify-center rounded-lg bg-reef/10 text-reef">
-                <Sparkles size={18} aria-hidden />
+                <ShieldCheck size={18} aria-hidden />
               </span>
             </div>
           </CardHeader>
@@ -272,7 +272,7 @@ function deviceTripCount(fallback: number) {
 
 function ValueTile({ icon, label, text }: { icon: React.ReactNode; label: string; text: string }) {
   return (
-    <div className="rounded-lg border border-white/16 bg-white/10 p-4 backdrop-blur">
+    <div className="rounded-lg border border-white/20 bg-white/10 p-4 backdrop-blur">
       <span className="text-coral">{icon}</span>
       <p className="mt-3 font-semibold">{label}</p>
       <p className="mt-1 text-sm leading-5 text-paper/68">{text}</p>

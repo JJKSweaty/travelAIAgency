@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { DollarSign } from "lucide-react";
+import { Banknote } from "lucide-react";
 import { currencyOptions } from "@/lib/travel/currency";
 import type { CurrencyCode } from "@/lib/travel/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,21 +30,21 @@ export function CurrencySelector() {
   }
 
   return (
-    <div className="flex min-w-[118px] items-center gap-2 rounded-lg border border-ink/10 bg-white px-2 py-1.5 shadow-subtle">
-      <DollarSign size={16} className="shrink-0 text-reef" aria-hidden />
-      <span className="sr-only">Currency</span>
-      <Select value={currency} onValueChange={changeCurrency}>
-        <SelectTrigger className="h-8 border-0 bg-transparent px-0 py-0 shadow-none" aria-label="Currency">
-          <SelectValue aria-label="Currency" />
-        </SelectTrigger>
-        <SelectContent>
-          {currencyOptions.map((option) => (
-            <SelectItem key={option.code} value={option.code}>
-              {option.code}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+    <Select value={currency} onValueChange={changeCurrency}>
+      <SelectTrigger className="h-10 w-[132px] gap-2 border-ink/10 bg-white px-3 font-semibold shadow-subtle" aria-label="Currency">
+        <Banknote size={16} className="shrink-0 text-reef" aria-hidden />
+        <SelectValue aria-label="Currency" />
+      </SelectTrigger>
+      <SelectContent>
+        {currencyOptions.map((option) => (
+          <SelectItem key={option.code} value={option.code}>
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="font-semibold">{option.code}</span>
+              <span className="truncate text-ink/60">{option.label.replace(`${option.code} - `, "")}</span>
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }

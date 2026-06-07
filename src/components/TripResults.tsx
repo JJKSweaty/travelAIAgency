@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, BedDouble, Bookmark, Calendar, Car, ChefHat, ChevronDown, Coffee, Hotel, MapPinned, Moon, Plane, Plus, RefreshCcw, Route, Sparkles, Star, Sun, Ticket } from "lucide-react";
+import { ArrowLeft, BedDouble, Bookmark, Calendar, Car, ChefHat, ChevronDown, Coffee, Hotel, MapPinned, Moon, Plane, Plus, RefreshCcw, Route, Star, Sun, Ticket, WalletCards } from "lucide-react";
 import { BudgetMeter } from "@/components/BudgetMeter";
 import { PriceComparisonChart } from "@/components/PriceComparisonChart";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { applyTripSelectionsToBudget } from "@/lib/travel/pricing";
 import { isTripSaved, readCurrentTrip, saveTrip, updateSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
 import { buildTransitPlan } from "@/lib/travel/transit";
@@ -238,29 +241,32 @@ export function TripResults() {
               <div className="rounded-lg border border-ink/10 bg-white/76 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-reef">Stay base for transit planning</p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[220px_1fr]">
-                  <select
-                    className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm"
+                  <Select
                     value={plan.selectedStay?.type === "airbnb" ? "airbnb" : plan.selectedStay?.label ?? ""}
-                    onChange={(event) => {
-                      if (event.target.value === "airbnb") {
+                    onValueChange={(value) => {
+                      if (value === "airbnb") {
                         setSelectedStay({ type: "airbnb", label: "Airbnb / private stay", location: plan.selectedStay?.location ?? "" });
                         return;
                       }
-                      const selectedHotel = plan.hotels.find((hotel) => hotel.name === event.target.value);
+                      const selectedHotel = plan.hotels.find((hotel) => hotel.name === value);
                       if (!selectedHotel) return;
                       setSelectedStay({ type: "hotel", label: selectedHotel.name, location: selectedHotel.location });
                     }}
                   >
-                    {plan.hotels.map((hotel) => (
-                      <option key={hotel.id} value={hotel.name}>
-                        {hotel.name} ({hotel.location})
-                      </option>
-                    ))}
-                    <option value="airbnb">Airbnb / private stay</option>
-                  </select>
+                    <SelectTrigger aria-label="Stay base">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {plan.hotels.map((hotel) => (
+                        <SelectItem key={hotel.id} value={hotel.name}>
+                          {hotel.name} ({hotel.location})
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="airbnb">Airbnb / private stay</SelectItem>
+                    </SelectContent>
+                  </Select>
                   {plan.selectedStay?.type === "airbnb" ? (
-                    <input
-                      className="rounded-lg border border-ink/10 bg-white px-3 py-2 text-sm"
+                    <Input
                       placeholder="Enter Airbnb area or address"
                       value={plan.selectedStay.location}
                       onChange={(event) =>
@@ -396,7 +402,7 @@ function TripSummaryPanel({ plan }: { plan: TripPlan }) {
     ? `${plan.selectedFlightQuote.airline} ${plan.selectedFlightQuote.departureTime ?? ""} to ${plan.selectedFlightQuote.arrivalTime ?? ""}`.trim()
     : "";
   return (
-    <Panel title="Trip summary" icon={<Sparkles size={18} />}>
+    <Panel title="Trip summary" icon={<Route size={18} />}>
       <div className="grid gap-3 text-sm">
         <SummaryRow label="Dates" value={dateSummary(plan)} />
         <SummaryRow label="Travelers" value={`${plan.request.travelers} traveler${plan.request.travelers === 1 ? "" : "s"}`} />
@@ -446,7 +452,7 @@ function TripCostPanel({ plan }: { plan: TripPlan }) {
   ];
 
   return (
-    <Panel title="Trip cost" icon={<Sparkles size={18} />}>
+    <Panel title="Trip cost" icon={<WalletCards size={18} />}>
       <div className="grid gap-3">
         {rows.map((row) => (
           <div key={row.label} className="flex items-start justify-between gap-4 rounded-lg bg-white/72 px-4 py-3">
@@ -533,20 +539,25 @@ function ItineraryDayCard({
         <div className="mt-3 rounded-lg border border-ink/10 bg-white p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-reef">Add to day {day.day}</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_130px_120px_96px]">
-            <input className="rounded-lg border border-ink/10 px-3 py-2 text-sm" placeholder="Add place, activity, or food stop" value={drafts[day.day]?.title ?? ""} onChange={(event) => updateDraft(day.day, { title: event.target.value })} />
-            <select className="rounded-lg border border-ink/10 px-3 py-2 text-sm" value={drafts[day.day]?.category ?? "activity"} onChange={(event) => updateDraft(day.day, { category: event.target.value as ItineraryAdditionCategory })}>
-              <option value="food">Food</option>
-              <option value="activity">Activity</option>
-              <option value="show">Show</option>
-              <option value="shopping">Shopping</option>
-              <option value="relaxation">Relaxation</option>
-              <option value="custom">Custom</option>
-            </select>
-            <input className="rounded-lg border border-ink/10 px-3 py-2 text-sm" placeholder={`Cost (${currency ?? "USD"})`} type="number" min={0} value={drafts[day.day]?.estimatedCost ?? ""} onChange={(event) => updateDraft(day.day, { estimatedCost: event.target.value })} />
-            <button className="inline-flex items-center justify-center gap-1 rounded-lg bg-reef px-3 py-2 text-sm font-semibold text-white" onClick={() => addDayItem(day.day)}>
+            <Input placeholder="Add place, activity, or food stop" value={drafts[day.day]?.title ?? ""} onChange={(event) => updateDraft(day.day, { title: event.target.value })} />
+            <Select value={drafts[day.day]?.category ?? "activity"} onValueChange={(value) => updateDraft(day.day, { category: value as ItineraryAdditionCategory })}>
+              <SelectTrigger aria-label={`Category for day ${day.day}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="food">Food</SelectItem>
+                <SelectItem value="activity">Activity</SelectItem>
+                <SelectItem value="show">Show</SelectItem>
+                <SelectItem value="shopping">Shopping</SelectItem>
+                <SelectItem value="relaxation">Relaxation</SelectItem>
+                <SelectItem value="custom">Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder={`Cost (${currency ?? "USD"})`} type="number" min={0} value={drafts[day.day]?.estimatedCost ?? ""} onChange={(event) => updateDraft(day.day, { estimatedCost: event.target.value })} />
+            <Button variant="reef" onClick={() => addDayItem(day.day)}>
               <Plus size={14} aria-hidden />
               Add
-            </button>
+            </Button>
           </div>
 
           {(day.additions ?? []).length > 0 ? (
@@ -611,13 +622,15 @@ function TransitDetailCard({ transit, currency, open, onToggle }: { transit: Tra
 
 function Panel({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="glass-panel rounded-lg p-5">
-      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-        {icon}
-        {title}
-      </h2>
-      {children}
-    </section>
+    <Card className="bg-white/95">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-lg">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
   );
 }
 

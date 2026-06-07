@@ -2,15 +2,21 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
 const originalSerpApiKey = process.env.SERPAPI_KEY;
+const originalGooglePlacesApiKey = process.env.GOOGLE_PLACES_API_KEY;
+const originalGoogleMapsApiKey = process.env.GOOGLE_MAPS_API_KEY;
 
 describe("GET /api/travel/hotels", () => {
   afterEach(() => {
     process.env.SERPAPI_KEY = originalSerpApiKey;
+    process.env.GOOGLE_PLACES_API_KEY = originalGooglePlacesApiKey;
+    process.env.GOOGLE_MAPS_API_KEY = originalGoogleMapsApiKey;
     vi.unstubAllGlobals();
   });
 
   it("calls SerpApi Google Hotels with the single server key and normalizes properties", async () => {
     process.env.SERPAPI_KEY = "test-serpapi-key";
+    delete process.env.GOOGLE_PLACES_API_KEY;
+    delete process.env.GOOGLE_MAPS_API_KEY;
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
@@ -58,12 +64,65 @@ describe("GET /api/travel/hotels", () => {
 
   it("returns an empty array when SerpApi has no properties", async () => {
     process.env.SERPAPI_KEY = "test-serpapi-key-empty";
+    delete process.env.GOOGLE_PLACES_API_KEY;
+    delete process.env.GOOGLE_MAPS_API_KEY;
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ properties: [] })));
 
-    const response = await GET(new Request("http://localhost/api/travel/hotels?destination=Lisbon&checkInDate=2026-08-10&checkOutDate=2026-08-14"));
+    const response = await GET(new Request("http://localhost/api/travel/hotels?destination=Lisbon&checkInDate=2026-09-10&checkOutDate=2026-09-14"));
     const body = await response.json();
 
     expect(body.hotels).toEqual([]);
     expect(body.links.length).toBeGreaterThan(0);
+  });
+
+  it("falls back to Google Places when SerpApi is not configured", async () => {
+    delete process.env.SERPAPI_KEY;
+    process.env.GOOGLE_PLACES_API_KEY = "test-google-key";
+    delete process.env.GOOGLE_MAPS_API_KEY;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          places: [
+            {
+              id: "place-1",
+              displayName: { text: "Memmo Alfama" },
+              formattedAddress: "Alfama, Lisbon",
+              rating: 4.7,
+              userRatingCount: 1100,
+              googleMapsUri: "https://maps.example/hotel",
+              types: ["lodging"],
+              location: { latitude: 38.71, longitude: -9.13 }
+            }
+          ]
+        })
+      )
+    );
+
+    const response = await GET(new Request("http://localhost/api/travel/hotels?destination=Lisbon&checkInDate=2026-07-10&checkOutDate=2026-07-14&adults=2&currency=CAD"));
+    const body = await response.json();
+
+    expect(body.hotels[0]).toMatchObject({
+      source: "Google Places",
+      sourceUrl: "https://maps.example/hotel",
+      name: "Memmo Alfama",
+      pricePerNight: null,
+      totalPrice: null
+    });
+    expect(JSON.stringify(body)).not.toContain("test-google-key");
+  });
+
+  it("returns provider links instead of an error when no live hotel key is configured", async () => {
+    delete process.env.SERPAPI_KEY;
+    delete process.env.GOOGLE_PLACES_API_KEY;
+    delete process.env.GOOGLE_MAPS_API_KEY;
+
+    const response = await GET(new Request("http://localhost/api/travel/hotels?destination=Lisbon&checkInDate=2026-08-10&checkOutDate=2026-08-14"));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.hotels).toEqual([]);
+    expect(body.links.length).toBeGreaterThan(0);
+    expect(body.message).toMatch(/not configured/i);
   });
 });

@@ -132,7 +132,7 @@ export function buildFlightResults(plan: TripPlan): FlightSearchOption[] {
 
 export function flightResultsToSearchOptions(results: FlightResult[], fallbackLinks: ProviderSearchLink[] = []): FlightSearchOption[] {
   return results
-    .map((result, index): FlightSearchOption | null => {
+    .map((result): FlightSearchOption | null => {
       if (!result.airlineName || !result.departureTime || !result.arrivalTime) return null;
       const durationMinutes = durationMinutesFrom(result.duration);
       const departureTime = displayFlightTime(result.departureTime);

@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Car, ChefHat, Compass, DollarSign, MapPin, Plane, Route, Sparkles, Users, WalletCards } from "lucide-react";
+import { CalendarDays, Car, ChefHat, Compass, DollarSign, Gauge, Hotel, MapPin, MapPinned, Plane, Route, Search, Users, WalletCards } from "lucide-react";
 import { readCurrencyPreference } from "@/components/CurrencySelector";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { writeCurrentTrip } from "@/lib/travel/storage";
@@ -105,9 +106,9 @@ export function TripPlannerWizard() {
   }
 
   return (
-    <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-10 pt-2 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8">
-      <div className="glass-panel overflow-hidden rounded-lg">
-        <div className="relative min-h-[260px] bg-ink p-6 text-paper sm:p-8">
+    <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 pb-10 pt-4 sm:px-6 lg:grid-cols-[minmax(0,1fr)_390px] lg:px-8">
+      <Card className="overflow-hidden">
+        <div className="relative min-h-[280px] bg-ink p-6 text-paper sm:p-8">
           <div
             className="absolute inset-0 opacity-45"
             style={{
@@ -119,7 +120,7 @@ export function TripPlannerWizard() {
           />
           <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/70 to-transparent" />
           <div className="relative max-w-2xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-coral">Trip finder</p>
+            <Badge variant="coral" className="bg-coral text-white">Trip planner</Badge>
             <h1 className="mt-4 text-4xl font-semibold leading-tight sm:text-6xl">Shape a trip around your budget.</h1>
             <p className="mt-5 max-w-xl text-base leading-7 text-paper/78">
               Choose a destination or let Roamly find a strong fit, then compare stays, flights, food, activities, and daily routes in one plan.
@@ -170,8 +171,8 @@ export function TripPlannerWizard() {
                     if (!preferredDestinationEnabled) setDestinationSuggestions([]);
                   }}
                 >
-                  {request.preferredDestinationEnabled ? "Use my destination" : "Find a smart match"}
-                  <Sparkles size={16} className="text-coral" aria-hidden />
+                  {request.preferredDestinationEnabled ? "Use my destination" : "Recommend destination"}
+                  <MapPinned size={16} className="text-reef" aria-hidden />
                 </Button>
               </Field>
             </div>
@@ -218,7 +219,7 @@ export function TripPlannerWizard() {
                   <button
                     key={mode}
                     type="button"
-                    className={`focus-ring rounded-md px-3 py-2 text-sm font-semibold capitalize transition ${request.dateMode === mode ? "bg-ink text-paper" : "text-ink/68 hover:bg-ink/6"}`}
+                    className={`focus-ring rounded-md px-3 py-2 text-sm font-semibold capitalize transition ${request.dateMode === mode ? "bg-ink text-paper" : "text-ink/70 hover:bg-ink/5"}`}
                     onClick={() => setRequest({ ...request, dateMode: mode, startDate: "", endDate: "" })}
                   >
                     {mode}
@@ -254,7 +255,7 @@ export function TripPlannerWizard() {
               <Field label="Total budget" icon={<DollarSign size={17} />}>
                 <Input type="number" min={250} step={50} value={request.totalBudget} onChange={(event) => setRequest({ ...request, totalBudget: Number(event.target.value) })} />
               </Field>
-              <Field label="Travel style" icon={<Sparkles size={17} />}>
+              <Field label="Travel style" icon={<Gauge size={17} />}>
                 <Select value={request.travelStyle} onValueChange={(value) => setRequest({ ...request, travelStyle: value as TravelStyle })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -312,24 +313,26 @@ export function TripPlannerWizard() {
 
           {error ? <p className="rounded-lg bg-coral/10 px-4 py-3 text-sm font-medium text-coral">{error}</p> : null}
 
-          <Button className="h-13 py-4 text-base" onClick={submit} disabled={isLoading}>
-            {isLoading ? "Planning trip..." : "Generate trip plan"}
+          <Button className="h-12 text-base" onClick={submit} disabled={isLoading}>
+            {isLoading ? "Building plan..." : "Build trip plan"}
           </Button>
         </div>
-      </div>
+      </Card>
 
       <aside className="grid content-start gap-4">
         <LiveBudgetTracker tracker={budgetTracker} currency={currency} />
+        <LiveSearchReadiness request={request} />
         <Card>
-          <CardContent className="p-5">
-          <p className="text-sm font-semibold text-ink">What Roamly returns</p>
-          <div className="mt-4 grid gap-3 text-sm text-ink/70">
-            <span>Hotel and flight comparison pages</span>
-            <span>Transport options for the destination</span>
-            <span>Restaurants and popular places</span>
-            <span>Day-by-day itinerary with costs</span>
-            <span>Cheaper alternates when the budget is tight</span>
-          </div>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Planning output</CardTitle>
+            <CardDescription>Each generated plan includes the core details needed to compare and adjust the trip.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm text-ink/70">
+            <span className="rounded-lg bg-ink/5 px-3 py-2">Hotel and flight comparison pages</span>
+            <span className="rounded-lg bg-ink/5 px-3 py-2">Destination transport options</span>
+            <span className="rounded-lg bg-ink/5 px-3 py-2">Restaurants and popular places</span>
+            <span className="rounded-lg bg-ink/5 px-3 py-2">Day-by-day itinerary with costs</span>
+            <span className="rounded-lg bg-ink/5 px-3 py-2">Lower-cost alternates when the budget is tight</span>
           </CardContent>
         </Card>
       </aside>
@@ -404,8 +407,8 @@ function LocationSuggestionList({
             <span className="shrink-0 text-xs font-medium capitalize text-ink/52">{location.source}</span>
           </span>
           <span className="flex flex-wrap items-center gap-2 text-xs text-ink/58">
-            {location.costLevel ? <span className="rounded bg-ink/6 px-2 py-1">Cost {location.costLevel}/5</span> : null}
-            {location.detail ? <span className="rounded bg-ink/6 px-2 py-1">{location.detail}</span> : null}
+            {location.costLevel ? <span className="rounded bg-ink/5 px-2 py-1">Cost {location.costLevel}/5</span> : null}
+            {location.detail ? <span className="rounded bg-ink/5 px-2 py-1">{location.detail}</span> : null}
             {location.bestFor?.slice(0, 3).map((interest) => (
               <span key={interest} className="rounded bg-coral/10 px-2 py-1 text-coral">
                 {interest}
@@ -471,7 +474,7 @@ function Field({ label, icon, children }: { label: string; icon: React.ReactNode
 
 function StepSection({ step, title, icon, children }: { step: string; title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-ink/10 bg-white/58 p-4">
+    <section className="rounded-lg border border-ink/10 bg-white/60 p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <span className="flex size-9 items-center justify-center rounded-lg bg-reef/10 text-reef">{icon}</span>
@@ -494,13 +497,13 @@ function LiveBudgetTracker({ tracker, currency }: { tracker: BudgetTracker; curr
       <div className="bg-ink p-5 text-paper">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/54">Live budget tracker</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/60">Budget tracker</p>
             <p className="mt-3 text-4xl font-semibold">{formatMoney(tracker.dailySpendTarget, currency)}</p>
             <p className="mt-1 text-sm text-paper/62">daily spend target</p>
           </div>
           <span className={`rounded-full px-3 py-1 text-sm font-semibold ${tracker.toneClass}`}>{tracker.tone}</span>
         </div>
-        <div className="mt-5 h-2 rounded-full bg-white/14">
+        <div className="mt-5 h-2 rounded-full bg-white/15">
           <div className={`h-2 rounded-full ${tracker.barClass}`} style={{ width: `${tracker.percent}%` }} />
         </div>
         <p className="mt-4 text-sm font-medium text-paper/76">{tracker.action}</p>
@@ -518,6 +521,44 @@ function LiveBudgetTracker({ tracker, currency }: { tracker: BudgetTracker; curr
         </div>
       </div>
     </section>
+  );
+}
+
+function LiveSearchReadiness({ request }: { request: TripRequest }) {
+  const exactDates = request.dateMode === "exact" && Boolean(request.startDate && request.endDate);
+  const destinationReady = !request.preferredDestinationEnabled || Boolean(request.destination?.trim());
+  const ready = exactDates && destinationReady;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-lg">Flight and stay search</CardTitle>
+            <CardDescription>{ready ? "Live provider search will run from the comparison pages." : "Exact dates produce the strongest provider search."}</CardDescription>
+          </div>
+          <Badge variant={ready ? "default" : "secondary"}>{ready ? "Ready" : "Planning"}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-2 text-sm">
+        <ReadinessRow icon={<CalendarDays size={15} />} label="Dates" value={exactDates ? `${request.startDate} to ${request.endDate}` : "Use exact dates"} ready={exactDates} />
+        <ReadinessRow icon={<Plane size={15} />} label="Flights" value={exactDates ? "Fare search ready" : "Month mode uses links"} ready={exactDates} />
+        <ReadinessRow icon={<Hotel size={15} />} label="Hotels" value={exactDates ? "Rate search ready" : "Month mode uses links"} ready={exactDates} />
+        <ReadinessRow icon={<Search size={15} />} label="Destination" value={destinationReady ? "Ready" : "Choose a destination"} ready={destinationReady} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function ReadinessRow({ icon, label, value, ready }: { icon: React.ReactNode; label: string; value: string; ready: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-ink/5 px-3 py-2">
+      <span className="flex items-center gap-2 text-ink/62">
+        <span className={ready ? "text-reef" : "text-ink/38"}>{icon}</span>
+        {label}
+      </span>
+      <span className="text-right font-semibold text-ink/78">{value}</span>
+    </div>
   );
 }
 

@@ -2,15 +2,17 @@ import Link from "next/link";
 import { BedDouble, Plane } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMoney } from "@/lib/travel/currency";
 import type { CurrencyCode, PriceComparison, PriceQuote } from "@/lib/travel/types";
 
 export function PriceComparisonChart({ comparison, currency }: { comparison: PriceComparison; currency?: CurrencyCode }) {
   return (
-    <section className="glass-panel rounded-lg p-5">
-      <div className="mb-5 flex items-start justify-between gap-4">
+    <Card className="bg-white/95">
+      <CardHeader className="pb-4">
+        <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">Price comparison</h2>
+          <CardTitle className="text-lg">Price comparison</CardTitle>
           <p className="mt-1 text-sm text-ink/60">Compare package estimates and choose the option that best fits this trip.</p>
         </div>
         <div className="hidden rounded-lg bg-reef/10 px-3 py-2 text-sm font-semibold text-reef sm:block">
@@ -18,12 +20,15 @@ export function PriceComparisonChart({ comparison, currency }: { comparison: Pri
             ? `${formatMoney(comparison.lowestFlight.estimatedPrice + comparison.lowestHotel.estimatedPrice, currency)} low pair`
             : "Estimate mode"}
         </div>
-      </div>
+        </div>
+      </CardHeader>
+      <CardContent>
       <div className="grid gap-5 lg:grid-cols-2">
         <QuoteGroup title="Flights" icon={<Plane size={18} />} quotes={comparison.flights} currency={currency} href="/options/flights" cta="Compare flights" />
         <QuoteGroup title="Hotels" icon={<BedDouble size={18} />} quotes={comparison.hotels} currency={currency} href="/options/hotels" cta="Compare stays" />
       </div>
-    </section>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -40,7 +45,7 @@ function QuoteGroup({ title, icon, quotes, currency, href, cta }: { title: strin
         {quotes.map((quote, index) => {
           const width = Math.max(18, Math.round((quote.estimatedPrice / max) * 100));
           return (
-            <div key={quote.id} className="rounded-lg bg-white/76 p-3">
+            <div key={quote.id} className="rounded-lg bg-white/75 p-3">
               <div className="flex items-center justify-between gap-3 text-sm">
                 <span className="font-semibold">{quoteLabel(quote, index)}</span>
                 <span className="font-semibold">

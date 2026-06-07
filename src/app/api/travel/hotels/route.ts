@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getTravelCache, setTravelCache, travelCacheKey } from "@/lib/travel/cache";
 import { hotelFallbackLinks } from "@/lib/travel/deepLinks";
+import { searchGooglePlacesHotels } from "@/lib/travel/providers/hotels/googlePlacesHotels";
 import { searchSerpApiHotels } from "@/lib/travel/providers/hotels/serpApiHotels";
 import type { CurrencyCode, HotelResult } from "@/lib/travel/types";
 
@@ -27,24 +28,46 @@ export async function GET(req: Request) {
   if (cached) return NextResponse.json(cached);
 
   const serpApiKey = process.env.SERPAPI_KEY;
+  const googlePlacesKey = process.env.GOOGLE_PLACES_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY;
 
-  if (!serpApiKey) {
-    return NextResponse.json({ error: "SERPAPI_KEY is not configured", hotels: [], links }, { status: 500 });
+  if (!serpApiKey && !googlePlacesKey) {
+    return NextResponse.json({
+      hotels: [],
+      links,
+      message: "Live hotel providers are not configured. Use a provider search link for current rates."
+    });
   }
 
-  try {
-    const result = await searchSerpApiHotels({ apiKey: serpApiKey, destination, checkInDate, checkOutDate, adults, children, rooms, currency });
-    const hotels = result.hotels;
-    const payload: HotelRouteResponse = {
-      hotels,
-      links: hotels.length ? [] : links,
-      message: hotels.length ? undefined : result.message || "No SerpApi Google Hotels results are available. Use a provider search link for the latest options."
-    };
+  const messages: string[] = [];
+  let hotels: HotelResult[] = [];
 
-    return NextResponse.json(setTravelCache(cacheKey, payload, HOTEL_SEARCH_TTL_MS));
-  } catch {
-    return NextResponse.json({ error: "Hotel provider request failed", hotels: [], links }, { status: 502 });
+  if (serpApiKey) {
+    try {
+      const result = await searchSerpApiHotels({ apiKey: serpApiKey, destination, checkInDate, checkOutDate, adults, children, rooms, currency });
+      hotels = result.hotels;
+      if (result.message) messages.push(result.message);
+    } catch {
+      messages.push("Google Hotels provider did not respond.");
+    }
   }
+
+  if (!hotels.length && googlePlacesKey) {
+    try {
+      const result = await searchGooglePlacesHotels({ apiKey: googlePlacesKey, destination, currency });
+      hotels = result.hotels;
+      if (result.message) messages.push(result.message);
+    } catch {
+      messages.push("Google Places provider did not respond.");
+    }
+  }
+
+  const payload: HotelRouteResponse = {
+    hotels,
+    links: hotels.length ? [] : links,
+    message: hotels.length ? undefined : messages[0] || "No structured hotel results are available. Use a provider search link for current rates."
+  };
+
+  return NextResponse.json(setTravelCache(cacheKey, payload, HOTEL_SEARCH_TTL_MS));
 }
 
 type HotelRouteResponse = {

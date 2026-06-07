@@ -126,7 +126,7 @@ export class FallbackHotelSearchProvider implements HotelSearchProvider {
 }
 
 export class GooglePlacesHotelSearchProvider implements HotelSearchProvider {
-  async searchHotels(destination: DestinationOption, request: TripRequest): Promise<ProviderResult<HotelOption>> {
+  async searchHotels(destination: DestinationOption): Promise<ProviderResult<HotelOption>> {
     const apiKey = process.env.GOOGLE_PLACES_API_KEY ?? process.env.GOOGLE_MAPS_API_KEY;
     if (!apiKey) return { data: [], source: "fallback", providerName: "Google Places", confidence: 0, warnings: ["Google Places is not configured."] };
 

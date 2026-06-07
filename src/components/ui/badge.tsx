@@ -6,7 +6,7 @@ const badgeVariants = cva("inline-flex items-center rounded-full px-2.5 py-1 tex
   variants: {
     variant: {
       default: "bg-reef/10 text-reef",
-      secondary: "bg-ink/6 text-ink/60",
+      secondary: "bg-ink/5 text-ink/60",
       coral: "bg-coral/10 text-coral",
       gold: "bg-gold/15 text-ink/70",
       dark: "bg-ink text-paper"

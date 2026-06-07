@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -74,6 +74,10 @@ type ProviderSearchState = {
   links: ProviderSearchLink[];
 };
 
+type ProviderCacheArgs =
+  | { kind: "flights"; plan: TripPlan; searchKey: string; fetchedAt: string; flights: FlightResult[] }
+  | { kind: "hotels"; plan: TripPlan; searchKey: string; fetchedAt: string; hotels: HotelResult[] };
+
 const emptyProviderSearch: ProviderSearchState = {
   loading: false,
   searched: false,
@@ -88,6 +92,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
   const [providerSearch, setProviderSearch] = useState<ProviderSearchState>(emptyProviderSearch);
   const [flightResults, setFlightResults] = useState<FlightResult[]>([]);
   const [hotelResults, setHotelResults] = useState<HotelResult[]>([]);
+  const autoSearchKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     const task = window.setTimeout(() => {
@@ -107,40 +112,6 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
     return () => window.clearTimeout(task);
   }, []);
 
-  useEffect(() => {
-    if (!plan) {
-      setProviderSearch(emptyProviderSearch);
-      setFlightResults([]);
-      setHotelResults([]);
-      return;
-    }
-
-    const request = kind === "flights" ? flightProviderRequest(plan) : hotelProviderRequest(plan);
-
-    if (!request) {
-      const links = kind === "flights" ? fallbackFlightLinksForPlan(plan) : fallbackHotelLinksForPlan(plan);
-      setProviderSearch({
-        loading: false,
-        searched: true,
-        links,
-        message: "Live SerpApi results require exact travel dates. Use a provider search link or regenerate the trip with exact dates."
-      });
-      setFlightResults([]);
-      setHotelResults([]);
-      return;
-    }
-
-    const cached = readFreshProviderCache(kind, request, plan);
-    setProviderSearch({
-      loading: false,
-      searched: Boolean(cached),
-      links: request.fallbackLinks,
-      message: cached ? undefined : "Live prices have not been searched for this trip yet. Use Refresh prices to call SerpApi once for these exact inputs."
-    });
-    setFlightResults(kind === "flights" ? cached?.flights ?? [] : []);
-    setHotelResults(kind === "hotels" ? cached?.hotels ?? [] : []);
-  }, [kind, plan]);
-
   function persist(next: TripPlan) {
     const priced = applyTripSelectionsToBudget(next);
     setPlan(priced);
@@ -149,14 +120,14 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
     return priced;
   }
 
-  function persistProviderCache(args: { kind: "flights"; plan: TripPlan; searchKey: string; fetchedAt: string; flights: FlightResult[] } | { kind: "hotels"; plan: TripPlan; searchKey: string; fetchedAt: string; hotels: HotelResult[] }) {
+  const persistProviderCache = useCallback((args: ProviderCacheArgs) => {
     const next = withProviderCache(args);
     setPlan(next);
     writeCurrentTrip(next);
     if (saved) void updateSavedTrip(next).catch(() => undefined);
-  }
+  }, [saved]);
 
-  async function refreshProviderResults(force = false) {
+  const refreshProviderResults = useCallback(async (force = false) => {
     if (!plan) return;
     const request = kind === "flights" ? flightProviderRequest(plan) : hotelProviderRequest(plan);
     if (!request) {
@@ -164,7 +135,7 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         loading: false,
         searched: true,
         links: kind === "flights" ? fallbackFlightLinksForPlan(plan) : fallbackHotelLinksForPlan(plan),
-        message: "Live SerpApi results require exact travel dates. Update the trip dates before refreshing prices."
+        message: "Live provider search requires exact travel dates. Update the trip dates before refreshing prices."
       });
       return;
     }
@@ -197,14 +168,18 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         const flights = Array.isArray(body.flights) ? body.flights : [];
         setFlightResults(flights);
         setHotelResults([]);
-        writeBrowserSearchCache({ kind: "flights", key: request.searchKey, fetchedAt, results: flights });
-        persistProviderCache({ kind: "flights", plan, searchKey: request.searchKey, fetchedAt, flights });
+        if (flights.length) {
+          writeBrowserSearchCache({ kind: "flights", key: request.searchKey, fetchedAt, results: flights });
+          persistProviderCache({ kind: "flights", plan, searchKey: request.searchKey, fetchedAt, flights });
+        }
       } else {
         const hotels = Array.isArray(body.hotels) ? body.hotels : [];
         setHotelResults(hotels);
         setFlightResults([]);
-        writeBrowserSearchCache({ kind: "hotels", key: request.searchKey, fetchedAt, results: hotels });
-        persistProviderCache({ kind: "hotels", plan, searchKey: request.searchKey, fetchedAt, hotels });
+        if (hotels.length) {
+          writeBrowserSearchCache({ kind: "hotels", key: request.searchKey, fetchedAt, results: hotels });
+          persistProviderCache({ kind: "hotels", plan, searchKey: request.searchKey, fetchedAt, hotels });
+        }
       }
 
       setProviderSearch({ loading: false, searched: true, links: nextLinks, message: body.message });
@@ -216,7 +191,51 @@ export function TravelOptionsPage({ kind }: TravelOptionsPageProps) {
         message: "The travel provider request failed. Use a provider search link for the latest options."
       });
     }
-  }
+  }, [kind, persistProviderCache, plan]);
+
+  useEffect(() => {
+    const task = window.setTimeout(() => {
+      if (!plan) {
+        setProviderSearch(emptyProviderSearch);
+        setFlightResults([]);
+        setHotelResults([]);
+        return;
+      }
+
+      const request = kind === "flights" ? flightProviderRequest(plan) : hotelProviderRequest(plan);
+
+      if (!request) {
+        const links = kind === "flights" ? fallbackFlightLinksForPlan(plan) : fallbackHotelLinksForPlan(plan);
+        setProviderSearch({
+          loading: false,
+          searched: true,
+          links,
+          message: "Live provider search requires exact travel dates. Use a provider search link or rebuild the trip with exact dates."
+        });
+        setFlightResults([]);
+        setHotelResults([]);
+        return;
+      }
+
+      const cached = readFreshProviderCache(kind, request, plan);
+      const autoSearchKey = `${kind}:${request.searchKey}`;
+      setProviderSearch({
+        loading: !cached && autoSearchKeyRef.current !== autoSearchKey,
+        searched: Boolean(cached),
+        links: request.fallbackLinks,
+        message: cached ? undefined : autoSearchKeyRef.current === autoSearchKey ? "Provider search did not return structured results. Use a provider link or refresh again." : "Checking current provider prices for these exact inputs."
+      });
+      setFlightResults(kind === "flights" ? cached?.flights ?? [] : []);
+      setHotelResults(kind === "hotels" ? cached?.hotels ?? [] : []);
+
+      if (!cached && autoSearchKeyRef.current !== autoSearchKey) {
+        autoSearchKeyRef.current = autoSearchKey;
+        void refreshProviderResults(false);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(task);
+  }, [kind, plan, refreshProviderResults]);
 
   function selectFlight(option: FlightSearchOption) {
     if (!plan) return;
@@ -320,15 +339,16 @@ function FlightResultsExperience({
               </span>
             </div>
           </div>
-          <div className="grid gap-2 rounded-lg bg-ink p-4 text-paper sm:min-w-[280px]">
-            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-paper/58">Current trip total</span>
-            <span className="text-3xl font-semibold">{formatMoney(plan.budget.totalEstimated, currency)}</span>
-            <span className="text-sm text-paper/64">Selecting a flight updates this estimate.</span>
-            <Button variant="secondary" size="sm" onClick={onRefresh} disabled={providerSearch.loading}>
-              <RotateCcw size={15} aria-hidden />
-              Refresh prices
-            </Button>
-          </div>
+          <ProviderStatusPanel
+            kind="flights"
+            count={results.length}
+            latestFetchedAt={latestFetchedAt}
+            providerSearch={providerSearch}
+            tripTotal={plan.budget.totalEstimated}
+            currency={currency}
+            onRefresh={onRefresh}
+            detail="Selecting a flight updates this estimate."
+          />
         </div>
       </section>
 
@@ -369,7 +389,7 @@ function FlightResultsExperience({
               description={
                 options.length
                   ? "Clear a filter or switch back to Best value to see more routes for this trip."
-                  : providerSearch.message ?? "SerpApi Google Flights did not return structured flight results for this search."
+                  : providerSearch.message ?? "The live provider search did not return structured flight results for this trip."
               }
               links={options.length ? [] : providerSearch.links}
               actionLabel={options.length ? "Reset filters" : "Refresh prices"}
@@ -443,15 +463,17 @@ function HotelResultsExperience({
               <Badge variant="dark" className="bg-white/12 text-paper">Trip total updates instantly</Badge>
             </div>
           </div>
-          <div className="rounded-lg bg-white/12 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-paper/62">Current trip total</p>
-            <p className="mt-2 text-3xl font-semibold">{formatMoney(plan.budget.totalEstimated, currency)}</p>
-            <p className="mt-1 text-sm text-paper/68">Selecting a stay updates lodging for the trip.</p>
-            <Button className="mt-4" variant="secondary" size="sm" onClick={onRefresh} disabled={providerSearch.loading}>
-              <RotateCcw size={15} aria-hidden />
-              Refresh prices
-            </Button>
-          </div>
+          <ProviderStatusPanel
+            kind="hotels"
+            count={results.length}
+            latestFetchedAt={latestFetchedAt}
+            providerSearch={providerSearch}
+            tripTotal={plan.budget.totalEstimated}
+            currency={currency}
+            onRefresh={onRefresh}
+            detail="Selecting a stay updates lodging for the trip."
+            dark
+          />
         </div>
       </section>
 
@@ -493,7 +515,7 @@ function HotelResultsExperience({
               description={
                 options.length
                   ? "Clear a filter or switch to Best value to restore the stay list."
-                  : providerSearch.message ?? "SerpApi Google Hotels did not return structured hotel results for this search."
+                  : providerSearch.message ?? "The live provider search did not return structured hotel results for this trip."
               }
               links={options.length ? [] : providerSearch.links}
               actionLabel={options.length ? "Reset filters" : "Refresh prices"}
@@ -824,6 +846,71 @@ function OptionsTopBar({ onBack }: { onBack: () => void }) {
         <Link href="/">Planner</Link>
       </Button>
     </div>
+  );
+}
+
+function ProviderStatusPanel({
+  kind,
+  count,
+  latestFetchedAt,
+  providerSearch,
+  tripTotal,
+  currency,
+  onRefresh,
+  detail,
+  dark = false
+}: {
+  kind: TravelOptionsPageProps["kind"];
+  count: number;
+  latestFetchedAt?: string;
+  providerSearch: ProviderSearchState;
+  tripTotal: number;
+  currency?: CurrencyCode;
+  onRefresh: () => void;
+  detail: string;
+  dark?: boolean;
+}) {
+  const noun = kind === "flights" ? "flight" : "stay";
+  const status = providerSearch.loading
+    ? "Searching providers"
+    : count > 0
+      ? `${count} current ${noun}${count === 1 ? "" : "s"}`
+      : providerSearch.searched
+        ? "Provider links ready"
+        : "Ready to search";
+  const statusDetail = providerSearch.loading
+    ? kind === "flights" ? "Checking flight fares for these dates." : "Checking hotel rates for these dates."
+    : latestFetchedAt
+      ? updatedAgo(latestFetchedAt)
+      : providerSearch.message ?? "Use refresh to check current provider data.";
+  const icon = providerSearch.loading ? <Clock size={15} aria-hidden /> : count > 0 ? <CheckCircle2 size={15} aria-hidden /> : <ExternalLink size={15} aria-hidden />;
+
+  return (
+    <Card className={dark ? "border-white/20 bg-white/10 text-paper shadow-none backdrop-blur" : "border-ink bg-ink text-paper"}>
+      <CardContent className="grid gap-3 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-paper/60">Current trip total</p>
+            <p className="mt-2 text-3xl font-semibold">{formatMoney(tripTotal, currency)}</p>
+            <p className="mt-1 text-sm text-paper/64">{detail}</p>
+          </div>
+          <Badge variant="dark" className="shrink-0 gap-1 bg-white/12 text-paper">
+            {icon}
+            {providerSearch.loading ? "Live" : count > 0 ? "Updated" : "Links"}
+          </Badge>
+        </div>
+
+        <div className="rounded-lg bg-white/10 px-3 py-3">
+          <p className="text-sm font-semibold">{status}</p>
+          <p className="mt-1 text-xs leading-5 text-paper/64">{statusDetail}</p>
+        </div>
+
+        <Button variant="secondary" size="sm" onClick={onRefresh} disabled={providerSearch.loading}>
+          <RotateCcw size={15} aria-hidden />
+          {providerSearch.loading ? "Searching..." : "Refresh prices"}
+        </Button>
+      </CardContent>
+    </Card>
   );
 }
 

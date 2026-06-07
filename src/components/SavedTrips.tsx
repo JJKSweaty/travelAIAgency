@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CloudUpload, MapPinned, Trash2 } from "lucide-react";
+import { CalendarDays, CloudUpload, MapPinned, Trash2, WalletCards } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMoney } from "@/lib/travel/currency";
 import { getSaveMode, importGuestTrips, listSavedTrips, readSavedTrips, removeSavedTrip, writeCurrentTrip } from "@/lib/travel/storage";
 import type { TripPlan } from "@/lib/travel/types";
@@ -49,10 +50,11 @@ export function SavedTrips() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 pb-12 pt-2 sm:px-6 lg:px-8">
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3 rounded-lg border border-ink/10 bg-white/90 p-5 shadow-subtle">
         <div>
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Saved plans</p>
-        <h1 className="mt-3 text-4xl font-semibold">{mode === "account" ? "Your Roamly library" : "Saved trips"}</h1>
+          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-reef">Saved plans</p>
+          <h1 className="mt-3 text-4xl font-semibold">{mode === "account" ? "Your Roamly library" : "Saved trips"}</h1>
+          <p className="mt-2 text-sm text-ink/60">{mode === "account" ? "Trips saved to your account." : "Trips saved on this device."}</p>
         </div>
         {mode === "account" && guestCount > 0 ? (
           <Button variant="reef" onClick={importLocalTrips}>
@@ -80,28 +82,37 @@ export function SavedTrips() {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {trips.map((trip) => (
-            <article key={trip.id} className="glass-panel overflow-hidden rounded-lg">
-              <div className="h-36 bg-cover bg-center" style={{ backgroundImage: `url(${trip.destination.imageUrl})` }} />
-              <div className="p-5">
+            <Card key={trip.id} className="overflow-hidden">
+              <div className="h-40 bg-cover bg-center" style={{ backgroundImage: `url(${trip.destination.imageUrl})` }} />
+              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-xl font-semibold">{trip.destination.name}</h2>
-                    <p className="mt-1 text-sm text-ink/60">
-                      {trip.request.tripLengthDays} days - {formatMoney(trip.request.totalBudget, trip.request.currency)} budget
-                    </p>
+                    <CardTitle className="text-xl">{trip.destination.name}</CardTitle>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Badge variant="secondary" className="gap-1">
+                        <CalendarDays size={13} aria-hidden />
+                        {trip.request.tripLengthDays} days
+                      </Badge>
+                      <Badge variant="secondary" className="gap-1">
+                        <WalletCards size={13} aria-hidden />
+                        {formatMoney(trip.request.totalBudget, trip.request.currency)}
+                      </Badge>
+                    </div>
                   </div>
-                  <button className="focus-ring rounded-lg bg-white/70 p-2 text-coral transition hover:bg-coral/10" aria-label={`Delete ${trip.destination.name}`} onClick={() => remove(trip.id)}>
+                  <Button variant="outline" size="icon" className="text-coral hover:text-coral" aria-label={`Delete ${trip.destination.name}`} onClick={() => remove(trip.id)}>
                     <Trash2 size={17} aria-hidden />
-                  </button>
+                  </Button>
                 </div>
-                <p className="mt-3 line-clamp-2 text-sm leading-6 text-ink/66">{trip.destination.summary}</p>
+              </CardHeader>
+              <CardContent>
+                <p className="mt-3 line-clamp-2 text-sm leading-6 text-ink/70">{trip.destination.summary}</p>
                 <Button asChild variant="reef" size="sm" className="mt-5">
                   <Link href="/results" onClick={() => writeCurrentTrip(trip)}>
                     Open plan
                   </Link>
                 </Button>
-              </div>
-            </article>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
