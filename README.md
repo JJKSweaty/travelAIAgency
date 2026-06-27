@@ -216,7 +216,3 @@ The local Codex skill for this project is maintained at:
 ```bash
 ~/.codex/skills/ai-travel-agency
 ```
-
-## Notes
-
-Roamly is designed for trip planning and price exploration. Prices, currency conversions, hotel estimates, flight estimates, and itinerary suggestions should be verified through the outbound booking/search links before making real travel decisions.
